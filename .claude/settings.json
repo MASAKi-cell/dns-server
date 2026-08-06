@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(gh project *)",
+      "Bash(jq *)",
+      "Bash(uv run*python3 .claude/skills/*)",
+      "WebSearch",
+      "WebFetch",
+      "Write",
+      "Read(~/.zshrc)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./.envrc)",
+      "Read(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Read(./**/*.p12)",
+      "Bash(cat .env*)",
+      "Bash(head .env*)",
+      "Bash(tail .env*)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gcloud/**)",
+      "Bash(gh repo delete*)",
+      "Bash(gh repo archive*)"
+    ]
+  },
+  "enabledPlugins": {
+    "agent-skills@addy-agent-skills": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "deniedDomains": ["169.254.169.254", "metadata.google.internal"],
+      "allowLocalBinding": true
+    },
+    "filesystem": {
+      "allowWrite": [".claude/**"],
+      "denyRead": ["~/.ssh/**"]
+    }
+  }
+}

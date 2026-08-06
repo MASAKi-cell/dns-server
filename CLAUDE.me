@@ -1,0 +1,55 @@
+DNSをGoで自作する
+
+## 概要
+
+- 目的: DNSプロトコル(RFC1035ほか)ワイヤーフォーマットのパース/構築から
+  - 権威DNSサーバー: ゾーンファイルを読み込み、管理ドメインの問い合わせに応答する
+  - 再帰/キャッシュリゾルバ: ルートヒントから反復的に名前解決し、TTLベースでキャッシュする
+  - DNSクライアント/リゾルバライブラリ: digのようにクエリを送ってパースする
+
+## ディレクトリ構成
+
+```
+dns/
+├── message/    RFC1035ワイヤーフォーマット(Header/Question/RRのパース・組み立て、名前圧縮)
+├── client/     クエリを投げてパースする最小クライアント(dig相当)
+├── zone/       ゾーンファイルパーサ + レコードストア
+├── server/     UDP/TCPリスナー、ハンドラのディスパッチ
+├── resolver/   再帰解決ロジック(ルートヒント、リファラル追跡、キャッシュ)
+└── cmd/
+    ├── authd/     権威DNSサーバー本体
+    ├── resolved/  再帰/キャッシュリゾルバ本体
+    └── digclone/  クライアントCLI
+```
+
+## 開発ツール
+
+- Go / biome / golangci-lint のバージョンは `mise.toml` でpin。`mise install` で導入する
+- biome: `biome.json` に従いJSON等のフォーマット/リントを実行（Goファイルは対象外）
+- golangci-lint: `.golangci.yml`（v2形式、`standard` リンターセット）に従って実行。`mise run lint` で実行すること（`golangci-lint run ./...` を直接叩かず、mise task経由に統一する）
+
+## トークン最適化
+
+### 組み込みツール優先
+
+Bash 経由のシェルコマンドより Claude Code 組み込みツールの方がトークン効率が良い。以下の対応で使い分けること：
+
+| 操作 | 使うツール | 禁止コマンド |
+|---|---|---|
+| ファイル読み込み | `Read` | `cat`, `head`, `tail` |
+| ファイル・パス検索 | `Glob` | `ls`, `find` |
+| 文字列検索 | `Grep` | `grep` |
+
+### RTK（シェル出力圧縮）
+
+[RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) を導入。Bash を使う場合はシェルコマンドの出力を自動圧縮し、トークン消費を削減する。
+`rtk init -g` により Claude Code の Bash フックが設定されており、コマンドは自動的に RTK 経由で実行される。
+明示的に RTK を使う場合は以下のコマンドを使用すること：
+
+```bash
+rtk git status      # git status の圧縮版
+rtk git diff        # git diff の圧縮版
+rtk git log         # git log の圧縮版
+rtk tsc             # TypeScript コンパイルエラーの圧縮版
+rtk gain            # トークン削減統計の確認
+```
