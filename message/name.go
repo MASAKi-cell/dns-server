@@ -3,25 +3,24 @@ package message
 import (
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"strings"
 )
 
 const (
-	maxLabelLength = 63  // RFC1035 3.1: ラベルは63byteまで
-	maxNameLength  = 255 // RFC1035 3.1: 名前全体は255byteまで
-
-	// compressionPointerMask は圧縮ポインタを示す先頭2bit(0b11)のマスク(RFC1035 4.1.4)。
-	compressionPointerMask = 0xC0
-	// maxCompressionJumps は圧縮ポインタの追従回数の上限。
-	// 255byteの名前でもラベル数は127個程度に収まるため、十分な余裕を持たせている。
-	maxCompressionJumps = 128
+	maxLabelLength         = 63   // RFC1035 3.1: ラベルは63byteまで
+	maxNameLength          = 255  // RFC1035 3.1: 名前全体は255byteまで
+	compressionPointerMask = 0xC0 // 圧縮ポインタを示す先頭2bit(0b11)のマスク(RFC1035 4.1.4)。
+	maxCompressionJumps    = 128  // 圧縮ポインタの追従回数の上限。255byteの名前でもラベル数は127個程度に収まるため、十分な余裕を持たせている。
 )
 
 // Name はDNSドメイン名を表す。ラベルをドットで連結した完全修飾形式
 // (例: "www.example.com.")で保持し、ルートは "." とする。
+// RFC1035の慣習に従ってドット付きの形式で保持される設計。
 type Name string
 
-// labels は名前をラベルのスライスに分解する。空ラベル(連続するドット)はエラーとする。
+// labels は名前をラベルのスライスに分解する（ラベルをドット区切りで保持）
+// "www.example.com."をラベルのスライス（["www", "example", "com"]）に分解する処理
 func (n Name) labels() ([]string, error) {
 	trimmed := strings.TrimSuffix(string(n), ".")
 	if trimmed == "" {
@@ -29,10 +28,8 @@ func (n Name) labels() ([]string, error) {
 	}
 
 	labels := strings.Split(trimmed, ".")
-	for _, label := range labels {
-		if label == "" {
-			return nil, fmt.Errorf("name %q contains an empty label", n)
-		}
+	if slices.Contains(labels, "") {
+		return nil, fmt.Errorf("name %q contains an empty label", n)
 	}
 
 	return labels, nil

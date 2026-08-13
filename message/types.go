@@ -42,10 +42,10 @@ func (t Type) String() string {
 type Class uint16
 
 const (
-	ClassIN Class = 1
-	ClassCS Class = 2
-	ClassCH Class = 3
-	ClassHS Class = 4
+	ClassIN Class = 1 // 実運用でよく使用されるクラス
+	ClassCS Class = 2 // 現在は廃止
+	ClassCH Class = 3 // MITのChaosnetプロトコル用に定義されたクラス
+	ClassHS Class = 4 // Hesiod。MIT Project Athenaで使われたネームサービス（ユーザー情報やメールルーティングなど）用のクラス
 )
 
 func (c Class) String() string {
