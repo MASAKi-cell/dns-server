@@ -37,6 +37,7 @@ func (n Name) labels() ([]string, error) {
 
 // marshal はラベル長プレフィックス方式でエンコードし、bufに追記して返す。
 // 名前圧縮ポインタの書き込みは対象外(常にフルスペルで書き込む)。
+// 名前のラベルは「長さbyte + ラベル本体」の形式
 func (n Name) marshal(buf []byte) ([]byte, error) {
 	labels, err := n.labels()
 	if err != nil {
@@ -55,18 +56,19 @@ func (n Name) marshal(buf []byte) ([]byte, error) {
 		if len(label) > maxLabelLength {
 			return nil, fmt.Errorf("name %q: label %q exceeds %d bytes", n, label, maxLabelLength)
 		}
-		buf = append(buf, byte(len(label)))
-		buf = append(buf, label...)
+		// 長さbyte + ラベル本体の形式に設定
+		buf = append(buf, byte(len(label))) // ラベルの長さ(1byte)
+		buf = append(buf, label...)         // ラベル本体
 	}
 	buf = append(buf, 0)
 
 	return buf, nil
 }
 
-// readName はラベル長プレフィックス方式の名前をデコードする。
+// ラベル長プレフィックス方式の名前をデコードする。
 // 圧縮ポインタ(先頭2bitが0b11)を追従するが、dの現在位置(d.pos)は
-// 「圧縮ポインタも含めて名前を読み終えた直後」まで進める。ポインタの飛び先の読み取りは
-// d.posを動かさずローカルのカーソルで行う。
+// 「圧縮ポインタも含めて名前を読み終えた直後」まで進める。
+// ポインタの飛び先の読み取りはd.posを動かさずローカルのカーソルで行う。
 func (d *decoder) readName() (Name, error) {
 	labels := []string{}
 	cursor := d.pos
@@ -88,6 +90,7 @@ func (d *decoder) readName() (Name, error) {
 			}
 			return joinLabels(labels), nil
 
+			// byte が圧縮ポインタか判定(上位2bitが両方1か)する
 		case length&compressionPointerMask == compressionPointerMask:
 			if cursor+2 > len(d.buf) {
 				return "", fmt.Errorf("name: truncated compression pointer at offset %d", cursor)
@@ -103,6 +106,7 @@ func (d *decoder) readName() (Name, error) {
 				return "", fmt.Errorf("name: compression pointer at offset %d does not point backward", cursor)
 			}
 
+			// 上位2bitが片方だけ1(01か10)の場合はRFC1035で未定義・不正な値として弾く
 			if !jumped {
 				d.pos = cursor + 2
 				jumped = true
