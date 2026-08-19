@@ -10,21 +10,21 @@ const headerSize = 12
 
 // Header はDNSメッセージ先頭の12byte固定長ヘッダを表す(RFC1035 4.1.1)。
 type Header struct {
-	ID uint16
+	ID uint16 // クライアントが発行する16bitの識別子
 
-	QR     bool
-	Opcode Opcode
-	AA     bool
-	TC     bool
-	RD     bool
-	RA     bool
-	Z      uint8 // 3bit, reserved (must be zero)
-	RCode  RCode
+	QR     bool   // Query(0)かResponse(1)かを示す1bit
+	Opcode Opcode // クエリの種類(標準クエリ=0、旧IQUERY=1、サーバーステータス要求=2)
+	AA     bool   // Authoritative Answer。応答者がそのゾーンの権威サーバーかどうか
+	TC     bool   // TrunCation。UDPの512byte制限などでメッセージが切り詰められたことを示す。これが立っていたらクライアントはTCPで再送すべき
+	RD     bool   // クライアントがサーバーに再帰的な名前解決を要求するかどうか
+	RA     bool   // Recursion Available。サーバーが再帰問い合わせに対応しているかどうか
+	Z      uint8  // 3bit, reserved (must be zero)
+	RCode  RCode  // 応答結果のエラーコード
 
-	QDCount uint16
-	ANCount uint16
-	NSCount uint16
-	ARCount uint16
+	QDCount uint16 // Question section のエントリ数
+	ANCount uint16 // Answer section のリソースレコード数
+	NSCount uint16 // Authority section のリソースレコード数
+	ARCount uint16 // Additional section のリソースレコード数
 }
 
 // marshal はHeaderをエンコードし、bufに追記して返す。

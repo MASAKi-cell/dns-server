@@ -6,8 +6,7 @@ import (
 )
 
 // decoder はバイト列を先頭から読み進めるカーソルを保持する。
-// 名前圧縮ポインタ(RFC1035 4.1.4)がバッファ内の任意の位置を後方参照するため、
-// 全体のバッファと現在位置を保持する構造にしている。
+// 名前圧縮ポインタ(RFC1035 4.1.4)がバッファ内の任意の位置を後方参照するため、全体のバッファと現在位置を保持する構造にしている。
 type decoder struct {
 	buf []byte
 	pos int
@@ -44,8 +43,7 @@ func (d *decoder) readUint32() (uint32, error) {
 	return v, nil
 }
 
-// readBytes は次のn byteを返す。返されるスライスはdの内部バッファを直接指すため、
-// 呼び出し側が保持する場合はコピーすること。
+// readBytes は次のn byteを返す。返されるスライスはdの内部バッファを直接指すため、呼び出し側が保持する場合はコピーすること。
 func (d *decoder) readBytes(n int) ([]byte, error) {
 	if n < 0 || d.pos+n > len(d.buf) {
 		return nil, fmt.Errorf("unexpected end of buffer reading %d bytes at offset %d", n, d.pos)
