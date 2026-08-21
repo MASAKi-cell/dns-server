@@ -11,16 +11,17 @@ Goの型とエンコード/デコード処理としてどう表現している�
 
 ## 2. ファイル構成
 
-| ファイル | 役割 |
-|---|---|
-| `types.go` | `Type`/`Class`/`Opcode`/`RCode`などプロトコル上の列挙値と`String()` |
-| `header.go` | `Header`構造体とそのmarshal/読み取り |
-| `question.go` | `Question`構造体とそのmarshal/読み取り |
-| `name.go` | `Name`型(ドメイン名)のラベル分解・エンコード・名前圧縮のデコード |
-| `rr.go` | `ResourceRecord`構造体とそのmarshal/読み取り、RDLENGTHの算出・検証 |
-| `rdata.go` | `RData`インターフェースとTYPE別実装(`AData`, `NSData`, `SOAData`など) |
-| `codec.go` | `decoder`(バイト列を読み進めるカーソル)とプリミティブな読み取りヘルパー |
-| `message.go` | `Message`構造体。全セクションを束ねた`Marshal`/`Unmarshal`のエントリポイント |
+```
+message/
+├── types.go    # Type/Class/Opcode/RCodeなどプロトコル上の列挙値とString()
+├── header.go   # Header構造体とそのmarshal/読み取り
+├── question.go # Question構造体とそのmarshal/読み取り
+├── name.go     # Name型(ドメイン名)のラベル分解・エンコード・名前圧縮のデコード
+├── rr.go       # ResourceRecord構造体とそのmarshal/読み取り、RDLENGTHの算出・検証
+├── rdata.go    # RDataインターフェースとTYPE別実装(AData, NSData, SOADataなど)
+├── codec.go    # decoder(バイト列を読み進めるカーソル)とプリミティブな読み取りヘルパー
+└── message.go  # Message構造体。全セクションを束ねたMarshal/Unmarshalのエントリポイント
+```
 
 ## 3. 型とDNS仕様の対応
 
