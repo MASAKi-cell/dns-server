@@ -2,7 +2,7 @@ package message
 
 import "fmt"
 
-// Message はDNSメッセージ全体を表す(RFC1035 4節)。
+// Message はDNSメッセージ全体を表す。
 type Message struct {
 	Header      Header
 	Questions   []Question

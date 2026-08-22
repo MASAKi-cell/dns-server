@@ -5,9 +5,8 @@ import (
 	"fmt"
 )
 
-// RData はResourceRecordのRDATA部分を表す(RFC1035 3.3)。
-// TYPEごとに構造化された実装(AData, MXDataなど)か、
-// 未知のTYPEに対するフォールバックとしてRawDataが使われる。
+// RData はResourceRecordのRDATA部分を表す。
+// TYPEごとに構造化された実装(AData, MXDataなど)か、TYPEに対するフォールバックとしてRawDataが使われる。
 type RData interface {
 	// rdataType はこのRDATAに対応するTYPEを返す。
 	rdataType() Type

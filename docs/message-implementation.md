@@ -1,26 +1,62 @@
 # messageパッケージの実装
 
-[dns-protocol.md](./dns-protocol.md)で説明したワイヤーフォーマットを、`message`パッケージが
-Goの型とエンコード/デコード処理としてどう表現しているかをまとめます。
+`message`フォルダがエンコード/デコード処理としてどう処理しているかをまとめます。
 
-## 1. パッケージの責務
+## 1. `message`の責務
 
-`message`パッケージが担うのは、DNSメッセージのバイト列 ⇔ Go構造体の相互変換のみです。
-ソケットの読み書き、ゾーンデータの管理、名前解決アルゴリズムはこのパッケージの範囲外で、
-それぞれ`client`/`zone`/`server`/`resolver`が担う想定です(いずれも未実装)。
+`message`の役割は、DNSメッセージの生のバイナリ形式をGo構造体（Message, Header, Question, ResourceRecord等）に変換しています。
+
+- Marshal: Go構造体 → バイト列(エンコード)
+- Unmarshal: バイト列 → Go構造体(デコード)
+
+ソケットの読み書き、ゾーンデータの管理、名前解決アルゴリズムはこのパッケージの範囲外で、それぞれ`client`/`zone`/`server`/`resolver`が担う想定です。
+
+| 処理 | 担当想定パッケージ |
+|---|---|
+| ソケットの読み書き(UDP/TCP通信) | client |
+| ゾーンデータの管理 | zone |
+| クエリの受信・ハンドラへの振り分け | server |
+| 反復的な名前解決・キャッシュ | resolver |
 
 ## 2. ファイル構成
 
-| ファイル | 役割 |
-|---|---|
-| `types.go` | `Type`/`Class`/`Opcode`/`RCode`などプロトコル上の列挙値と`String()` |
-| `header.go` | `Header`構造体とそのmarshal/読み取り |
-| `question.go` | `Question`構造体とそのmarshal/読み取り |
-| `name.go` | `Name`型(ドメイン名)のラベル分解・エンコード・名前圧縮のデコード |
-| `rr.go` | `ResourceRecord`構造体とそのmarshal/読み取り、RDLENGTHの算出・検証 |
-| `rdata.go` | `RData`インターフェースとTYPE別実装(`AData`, `NSData`, `SOAData`など) |
-| `codec.go` | `decoder`(バイト列を読み進めるカーソル)とプリミティブな読み取りヘルパー |
-| `message.go` | `Message`構造体。全セクションを束ねた`Marshal`/`Unmarshal`のエントリポイント |
+```
+message/
+├── types.go    # Type/Class/Opcode/RCodeなどプロトコル上の列挙値とString()
+├── header.go   # Header構造体とそのmarshal/読み取り
+├── question.go # Question構造体とそのmarshal/読み取り
+├── name.go     # Name型(ドメイン名)のラベル分解・エンコード・名前圧縮のデコード
+├── rr.go       # ResourceRecord構造体とそのmarshal/読み取り、RDLENGTHの算出・検証
+├── rdata.go    # RDataインターフェースとTYPE別実装(AData, NSData, SOADataなど)
+├── codec.go    # decoder(バイト列を読み進めるカーソル)と読み取りヘルパー
+└── message.go  # Message構造体。全セクションを束ねたMarshal/Unmarshalのエントリポイント
+```
+
+### 全体像
+
+各ファイルが定義する型が、どう組み合わさって`Message`を構成しているかを図にすると次の通りです。
+
+```mermaid
+graph TD
+    Message["Message<br/>(message.go)"]
+    Header["Header<br/>(header.go)"]
+    Question["Question × QDCOUNT<br/>(question.go)"]
+    RR["ResourceRecord × (AN+NS+AR)COUNT<br/>(rr.go)"]
+    Name["Name<br/>(name.go)"]
+    RData["RData interface<br/>(rdata.go)"]
+    Concrete["AData / AAAAData / NSData / CNAMEData /<br/>MXData / TXTData / SOAData / RawData"]
+
+    Message --> Header
+    Message --> Question
+    Message --> RR
+    Question --> Name
+    RR --> Name
+    RR --> RData
+    RData --> Concrete
+    Concrete -. ドメイン名を含む型のみ .-> Name
+```
+
+`codec.go`の`decoder`(バッファ+読み取り位置のカーソル)と`types.go`の`Type`/`Class`/`Opcode`/`RCode`は、上図のどの型からも共通して使われる基盤で、特定の型に紐づかないため図には含めていません。
 
 ## 3. 型とDNS仕様の対応
 
@@ -30,36 +66,50 @@ Goの型とエンコード/デコード処理としてどう表現している�
 | `Header` | 12byte固定ヘッダー。フラグ群は`QR`/`AA`等の`bool`フィールドに分解して保持し、ワイヤー上は1つの16bit `flags`値にパックします |
 | `Question` | Questionセクションの1エントリ |
 | `ResourceRecord` | Answer/Authority/Additionalセクションの1エントリ。RDLENGTHはフィールドとして持たず、marshal時に`RData.marshal`の結果から都度算出します |
-| `RData` | RDATA部分のインターフェース。TYPEごとに`AData`/`NSData`/`CNAMEData`/`MXData`/`TXTData`/`SOAData`が実装し、未対応のTYPEは生バイト列を保持する`RawData`にフォールバックします |
+| `RData` | RDATA部分のインターフェース。TYPEごとに`AData`/`NSData`/`CNAMEData`/`MXData`/`TXTData`/`SOAData`が実装する |
 | `Name` | `string`を基底型とし、`"www.example.com."`のようなドット区切りのFQDN形式で保持します |
+
+DNSのRDATA部分は、TYPEごとにバイト列の中身が異なります。
+- A → IPv4アドレス4byte固定
+- NS/CNAME → ドメイン名1つ
+- MX → 優先度(2byte) + ドメイン名
+- TXT → 可変個の文字列
+- SOA → ドメイン名2つ + 32bit整数5つ
+
+RDataフィールドで共通の型として使用できるようにしています。
+
+```go
+type RData interface {
+    rdataType() Type                        // どのTYPEか
+    marshal(buf []byte) ([]byte, error)     // 自分自身をバイト列に変換
+}
+```
+
 
 ## 4. Marshal(エンコード)の流れ
 
-エントリポイントは`Message.Marshal()`です(`message.go`)。
+`rr.go`の`marshal`関数
 
 1. `Header`のQDCOUNT/ANCOUNT/NSCOUNT/ARCOUNTを、実際の各スライスの長さで上書きします
-   (呼び出し側が件数を手で合わせる必要はありません)
 2. `Header.marshal`で12byte分を`buf`に追記します
 3. `Questions`を先頭から順に`Question.marshal`で追記します
 4. `Answers` → `Authorities` → `Additionals`の順に、それぞれ`ResourceRecord.marshal`で追記します
 
-いずれの層も「`[]byte`を受け取り、追記した`[]byte`を返す」というシグネチャで統一されており、
-`append`によるバッファの使い回しを前提にしています。
+いずれの層も「`[]byte`を受け取り、追記した`[]byte`を返す」というシグネチャで統一されており`append`によるバッファの使い回しを前提にしています。
 
-### RDLENGTHの算出(`rr.go`)
+### RDLENGTH（Resource Data Length）の算出(`rr.go`)
 
-`ResourceRecord.marshal`はRDLENGTHを事前に計算せず、次の手順で書き戻します。
+`ResourceRecord.marshal`、次の手順で行います。
 
 1. RDLENGTHの位置に0のプレースホルダーを書き込み、その位置(`rdlengthPos`)を覚えておきます
 2. `RData.marshal`でRDATA本体を追記します
 3. 追記後の長さとRDATA開始位置の差分からRDLENGTHの実値を求め、`rdlengthPos`に上書きします
 
-RDATAの内容(特に`Name`を含む場合)を書いてみるまで正確な長さが分からないため、
-この「後から書き戻す」方式になっています。
+RDATAの内容(特に`Name`を含む場合)を書いてみるまで正確な長さが分からないため、この「後から書き戻す」方式になっています。
 
 ## 5. Unmarshal(デコード)の流れ
 
-エントリポイントは`Unmarshal(data []byte)`です(`message.go`)。
+`message.go`の``Unmarshal`関数。
 
 1. `newDecoder(data)`でカーソルを初期化します
 2. `d.readHeader()`でHeaderを読み取ります
@@ -67,8 +117,7 @@ RDATAの内容(特に`Name`を含む場合)を書いてみるまで正確な長�
 4. `Header.ANCount`/`NSCount`/`ARCount`件ずつ、`d.readResourceRecords(n)`で
    Answer/Authority/Additionalを読みます
 
-各ステップのエラーは`fmt.Errorf("message: read xxx: %w", err)`の形でラップされ、
-どのセクションで失敗したかが呼び出し元まで伝わるようになっています。
+各ステップのエラーは`fmt.Errorf("message: read xxx: %w", err)`の形でラップされ、どのセクションで失敗したかが呼び出し元まで伝わるようになっています。
 
 ## 6. decoderの設計(`codec.go`)
 
@@ -79,12 +128,7 @@ type decoder struct {
 }
 ```
 
-単純な「今どこまで読んだか」のカーソルに見えますが、`buf`全体を保持しているのが重要な設計判断です。
-名前圧縮ポインタ(6節参照)はメッセージ内の任意の**過去の位置**を後方参照するため、
-すでに読み終えた領域にも自由にアクセスできる必要があり、そのために全体バッファを
-手放さない構造になっています。
-
-プリミティブな読み取りヘルパーは次のとおりです。
+`buf`全体を保持しています。名前圧縮ポインタはメッセージ内の任意の**過去の位置**を後方参照するため、すでに読み終えた領域にも自由にアクセスできる必要があり、そのために全体バッファを手放さない構造になっています。
 
 | メソッド | 用途 |
 |---|---|
@@ -106,8 +150,8 @@ type decoder struct {
 3. 各ラベルについて63byteを超えないか検証しつつ、「長さ(1byte) + 本体」を追記します
 4. 最後に終端の0byteを追記します
 
-名前圧縮ポインタの**書き込み**は行いません(常にフルスペルでエンコードします)。圧縮による
-サイズ削減は現状のスコープ外です。
+名前圧縮ポインタの**書き込み**は行いません(常にフルスペルでエンコードします)。
+※ 圧縮によるサイズ削減は現状のスコープ外です。
 
 ### デコード(名前圧縮への対応)
 
