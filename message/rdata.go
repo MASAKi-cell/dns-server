@@ -14,7 +14,7 @@ type RData interface {
 	marshal(buf []byte) ([]byte, error)
 }
 
-// AData はTYPE=A(IPv4アドレス)のRDATAを表す(RFC1035 3.4.1)。
+// AData はTYPE=A(IPv4アドレス)のRDATAを表す。
 type AData struct {
 	Address [4]byte
 }
@@ -25,7 +25,7 @@ func (r AData) marshal(buf []byte) ([]byte, error) {
 	return append(buf, r.Address[:]...), nil
 }
 
-// AAAAData はTYPE=AAAA(IPv6アドレス)のRDATAを表す(RFC3596)。
+// AAAAData はTYPE=AAAA(IPv6アドレス)のRDATAを表す。
 type AAAAData struct {
 	Address [16]byte
 }
@@ -36,7 +36,7 @@ func (r AAAAData) marshal(buf []byte) ([]byte, error) {
 	return append(buf, r.Address[:]...), nil
 }
 
-// NSData はTYPE=NSのRDATAを表す(RFC1035 3.3.11)。
+// NSData はTYPE=NSのRDATAを表す。
 type NSData struct {
 	NSDName Name
 }
@@ -51,7 +51,7 @@ func (r NSData) marshal(buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// CNAMEData はTYPE=CNAMEのRDATAを表す(RFC1035 3.3.1)。
+// CNAMEData はTYPE=CNAMEのRDATAを表す。
 type CNAMEData struct {
 	CName Name
 }
@@ -66,7 +66,7 @@ func (r CNAMEData) marshal(buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// MXData はTYPE=MXのRDATAを表す(RFC1035 3.3.9)。
+// MXData はTYPE=MXのRDATAを表す。
 type MXData struct {
 	Preference uint16
 	Exchange   Name
@@ -83,7 +83,7 @@ func (r MXData) marshal(buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// TXTData はTYPE=TXTのRDATAを表す(RFC1035 3.3.14)。
+// TXTData はTYPE=TXTのRDATAを表す。
 // 1つ以上のcharacter-string(1byte長プレフィックス)を保持する。
 type TXTData struct {
 	Txt []string
@@ -102,7 +102,7 @@ func (r TXTData) marshal(buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-// SOAData はTYPE=SOAのRDATAを表す(RFC1035 3.3.13)。
+// SOAData はTYPE=SOAのRDATAを表す。
 type SOAData struct {
 	MName   Name
 	RName   Name

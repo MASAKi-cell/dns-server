@@ -38,6 +38,9 @@ func (h Header) marshal(buf []byte) []byte {
 	return buf
 }
 
+// flags はHeaderの各フラグ/コード系フィールドを1つの16bit値にする。
+// 例えばHeader{RD: true}(他は全てゼロ値、再帰を要求する通常のクエリ)を渡すと、
+// RDに対応するbit8だけが1になり flags = 0000000100000000(2進) = 0x0100 が返る。
 func (h Header) flags() uint16 {
 	var flags uint16
 	if h.QR {
@@ -62,6 +65,12 @@ func (h Header) flags() uint16 {
 }
 
 // readHeader は先頭12byteをデコードしてHeaderを返す。
+//
+// 例えば次の12byte(ID=0x1234, flags=0x0100(RD=1のみ), QDCOUNT=1, 他0)を渡すと、
+//
+//	12 34 01 00 00 01 00 00 00 00 00 00
+//
+// Header{ID: 0x1234, RD: true, QDCount: 1}(他フィールドはゼロ値)が返る。
 func (d *decoder) readHeader() (Header, error) {
 	if len(d.buf) < headerSize {
 		return Header{}, fmt.Errorf("header: buffer too short: got %d bytes, want at least %d", len(d.buf), headerSize)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ResourceRecord はAnswer/Authority/AdditionalセクションのRRを表す(RFC1035 4.1.3)。
+// ResourceRecord はAnswer/Authority/AdditionalセクションのRRを表す。
 // RDLENGTHはRData.marshal/readRDataの結果から都度算出するため、フィールドとしては持たない。
 type ResourceRecord struct {
 	Name  Name

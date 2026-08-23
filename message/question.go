@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Question はDNSメッセージのQuestionセクションの1エントリを表す(RFC1035 4.1.2)。
+// Question はDNSメッセージのQuestionセクションの1エントリを表す。
 type Question struct {
 	Name  Name
 	Type  Type

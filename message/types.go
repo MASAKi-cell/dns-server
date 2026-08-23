@@ -4,7 +4,7 @@ package message
 
 import "fmt"
 
-// Type はリソースレコードのTYPE/QTYPEフィールドを表す(RFC1035 3.2.2, 3.2.3)。
+// Type はリソースレコードのTYPE/QTYPEフィールドを表す。
 type Type uint16
 
 const (
@@ -38,7 +38,7 @@ func (t Type) String() string {
 	}
 }
 
-// Class はリソースレコードのCLASS/QCLASSフィールドを表す(RFC1035 3.2.4, 3.2.5)。
+// Class はリソースレコードのCLASS/QCLASSフィールドを表す。
 type Class uint16
 
 const (
@@ -63,7 +63,7 @@ func (c Class) String() string {
 	}
 }
 
-// Opcode はHeaderのOPCODEフィールド(4bit)を表す(RFC1035 4.1.1)。
+// Opcode はHeaderのOPCODEフィールド(4bit)を表す。
 type Opcode uint8
 
 const (
@@ -85,7 +85,7 @@ func (o Opcode) String() string {
 	}
 }
 
-// RCode はHeaderのRCODEフィールド(4bit)を表す(RFC1035 4.1.1)。
+// RCode はHeaderのRCODEフィールド(4bit)を表す。
 type RCode uint8
 
 const (
