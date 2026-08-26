@@ -2,7 +2,7 @@ package client
 
 import "time"
 
-// Config はクライアントの設定を保持する。
+// クライアントの設定を保持する。
 type Config struct {
 	Servers    []string      // DNS サーバーリスト (例: "8.8.8.8:53")
 	Timeout    time.Duration // 1回のクエリのタイムアウト

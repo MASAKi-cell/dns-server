@@ -6,18 +6,12 @@ import (
 )
 
 var (
-	// ErrNoServers は DNS サーバーが設定されていない場合に返される。
-	ErrNoServers = errors.New("no DNS servers configured")
-
-	// ErrAllServersFailed は全ての DNS サーバーへのクエリが失敗した場合に返される。
-	ErrAllServersFailed = errors.New("all DNS servers failed")
-
-	// ErrTruncated はレスポンスが切り詰められている場合に返される。
-	// 将来の TCP フォールバック実装で使用。
-	ErrTruncated = errors.New("response truncated")
+	ErrNoServers        = errors.New("no DNS servers configured") // DNS サーバーが設定されていない場合に使用。
+	ErrAllServersFailed = errors.New("all DNS servers failed")    // 全ての DNS サーバーへのクエリが失敗した場合に使用。
+	ErrTruncated        = errors.New("response truncated")        // レスポンスが切り詰められている場合に使用。
 )
 
-// ServerError は特定のサーバーへのクエリ失敗を表す。
+// 特定のサーバーへのクエリ失敗を表す。
 type ServerError struct {
 	Server string
 	Err    error
