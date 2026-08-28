@@ -6,8 +6,8 @@
 
 `client`の役割は、`message`パッケージで構築したDNSクエリをUDPソケット経由でDNSサーバーに送信し、応答を受信して`message.Message`に変換することです。
 
-- Query: ドメイン名とレコードタイプを指定してDNSクエリを実行（簡易API）
-- Exchange: 構築済みの`message.Message`を送受信（詳細API）
+- Query: ドメイン名とレコードタイプを指定してDNSクエリを実行（簡易API） - 「example.comのAレコードが欲しい」など簡易的な問い合わせの場合に使用する
+- Exchange: 構築済みの`message.Message`を送受信（詳細API）- 複数Question、特殊フラグなど細かい制御が必要な場合に使用する
 
 名前解決アルゴリズム（反復的クエリ、キャッシュ）はこのパッケージの範囲外で、`resolver`パッケージが担う想定です。
 
@@ -48,7 +48,7 @@ graph TD
 
 | Go型 | 役割 |
 |---|---|
-| `Client` | DNSクエリを実行するスタブリゾルバ。Configを保持し、Query/Exchangeメソッドを提供 |
+| `Client` | DNSクエリを実行するスタブリゾルバ。Configを保持 |
 | `Config` | クライアントの設定（DNSサーバーリスト、タイムアウト、リトライ回数、リトライ間隔） |
 | `Option` | Configを変更する関数型（Functional Optionsパターン） |
 | `ServerError` | 特定のサーバーへのクエリ失敗を表すエラー型 |
@@ -141,7 +141,7 @@ c := client.NewClient(
 
 ## 6. リトライ・フェイルオーバーの流れ
 
-`Exchange`メソッドは、設定された全サーバーに対してフェイルオーバーを行います。
+`Exchange`メソッドは、設定された全サーバーに対してフェイルオーバー(あるサーバーが失敗したら、次のサーバーに切り替えて試す)を実施します。
 
 ```mermaid
 sequenceDiagram
@@ -169,26 +169,6 @@ sequenceDiagram
 | `exchangeWithRetry` | 単一サーバーへのリトライ |
 | `exchange` | 単一サーバーへの1回の送受信 |
 
-### 擬似コード
-
-```
-Exchange(msg):
-    for server in config.Servers:
-        resp, err = exchangeWithRetry(msg, server)
-        if err == nil:
-            return resp
-        lastErr = ServerError{Server: server, Err: err}
-    return ErrAllServersFailed
-
-exchangeWithRetry(msg, server):
-    for attempt in 0..config.MaxRetries:
-        if attempt > 0:
-            sleep(config.RetryDelay)
-        resp, err = exchange(msg, server)
-        if err == nil:
-            return resp
-    return lastErr
-```
 
 ## 7. exchange（UDP通信）の内部処理
 
@@ -212,8 +192,6 @@ sequenceDiagram
     Client-->>Client: resp
 ```
 
-### 実装のポイント
-
 1. **コンテキストによるタイムアウト**: `context.WithTimeout`でタイムアウト付きのコンテキストを作成
 2. **UDP接続**: `net.Dialer.DialContext`でUDP接続を確立
 3. **メッセージのエンコード**: `msg.Marshal()`でバイト列に変換
@@ -225,7 +203,7 @@ sequenceDiagram
 
 ### ID検証の重要性
 
-DNSはUDPを使用するため、応答が本当に自分のクエリに対するものかを確認する必要があります。攻撃者が偽の応答を送り込む「DNSキャッシュポイズニング」を防ぐため、クエリIDの検証は必須です。
+DNSはUDPを使用するため、応答が本当に自分のクエリに対するものかを確認する必要があります。攻撃者が偽の応答を送り込む「DNSキャッシュポイズニング」を防ぐため、クエリIDの検証を行う必要があります。
 
 ```go
 if resp.Header.ID != msg.Header.ID {
@@ -234,8 +212,6 @@ if resp.Header.ID != msg.Header.ID {
 ```
 
 ## 8. エラーハンドリング
-
-### センチネルエラー
 
 | エラー | 意味 |
 |---|---|
@@ -262,52 +238,9 @@ func (e *ServerError) Unwrap() error {
 }
 ```
 
-### エラーの伝播
+## 9. selfdig CLIツール
 
-各層でエラーをラップしながら伝播させ、最終的なエラーメッセージで失敗箇所を特定できます。
-
-```
-all DNS servers failed: server 8.8.8.8:53: read: i/o timeout
-```
-
-## 9. テストの構成
-
-`client_test.go`には以下のテストが含まれています。
-
-| テスト | 内容 |
-|---|---|
-| `TestNewClient_DefaultConfig` | デフォルト設定の検証 |
-| `TestNewClient_WithOptions` | オプション設定の検証 |
-| `TestExchange_NoServers` | サーバー未設定時のエラー |
-| `TestExchange_Success` | モックサーバーを使った正常系 |
-| `TestExchange_Timeout` | タイムアウトの検証 |
-
-### モックDNSサーバー
-
-テスト用のUDPサーバーを起動し、固定のレスポンスを返します。クエリのIDをレスポンスにコピーすることで、ID検証が通るようにしています。
-
-```go
-func mockDNSServer(t *testing.T, response []byte) (addr string, close func()) {
-    conn, _ := net.ListenPacket("udp", "127.0.0.1:0")
-    go func() {
-        buf := make([]byte, 512)
-        for {
-            n, clientAddr, _ := conn.ReadFrom(buf)
-            // クエリのIDをレスポンスにコピー
-            responseCopy := make([]byte, len(response))
-            copy(responseCopy, response)
-            responseCopy[0] = buf[0] // ID上位
-            responseCopy[1] = buf[1] // ID下位
-            conn.WriteTo(responseCopy, clientAddr)
-        }
-    }()
-    return conn.LocalAddr().String(), func() { conn.Close() }
-}
-```
-
-## 10. selfdig CLIツール
-
-`client`パッケージを使用したdigクローンとして、`cmd/selfdig`を提供しています。
+`client`パッケージを使用したdigクローンとして、`cmd/selfdig`を追加しています。
 
 ### 使い方
 
@@ -348,13 +281,3 @@ A, AAAA, NS, CNAME, MX, TXT, SOA
 ```bash
 go install ./cmd/selfdig
 ```
-
-## 11. 今後の拡張
-
-現在の実装はUDPのみに対応しています。今後のフェーズで以下の拡張が想定されています。
-
-| 拡張 | 内容 |
-|---|---|
-| TCP対応 | TCビット（切り詰め）が設定された場合のTCPフォールバック |
-| EDNS0 | 拡張DNSによる大きなUDPペイロードサイズのネゴシエーション |
-| DNSSEC検証 | 応答の署名検証 |

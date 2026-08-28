@@ -11,12 +11,12 @@ import (
 	"github.com/MASAKi-cell/dns/message"
 )
 
-// Client は DNS クエリを実行するスタブリゾルバ。
+// DNS クエリを実行するスタブリゾルバ
 type Client struct {
 	config *Config
 }
 
-// NewClient は新しい Client を作成する。
+// 新しい Client を作成
 func NewClient(opts ...Option) *Client {
 	config := &Config{
 		Timeout:    DefaultTimeout,
@@ -24,6 +24,7 @@ func NewClient(opts ...Option) *Client {
 		RetryDelay: DefaultRetryDelay,
 	}
 
+	// 可変長引数で任意の数のオプションを受け取る
 	for _, opt := range opts {
 		opt(config)
 	}
@@ -31,14 +32,14 @@ func NewClient(opts ...Option) *Client {
 	return &Client{config: config}
 }
 
-// Query は指定した名前と TYPE で DNS クエリを実行する簡易 API。
+// 指定した名前と TYPE で DNS クエリを実行する簡易API
 func (c *Client) Query(ctx context.Context, name string, typ message.Type) (*message.Message, error) {
 	id, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("generate id: %w", err)
 	}
 
-	// 末尾のドットがなければ追加（FQDN 形式に正規化）
+	// 末尾のドットがなければ追加（FQDN形式）
 	if !strings.HasSuffix(name, ".") {
 		name = name + "."
 	}
@@ -46,7 +47,7 @@ func (c *Client) Query(ctx context.Context, name string, typ message.Type) (*mes
 	msg := &message.Message{
 		Header: message.Header{
 			ID: id,
-			RD: true, // 再帰的解決を要求
+			RD: true, // 再帰的解決を要求（スタブリゾルバの為）
 		},
 		Questions: []message.Question{
 			{
@@ -60,8 +61,8 @@ func (c *Client) Query(ctx context.Context, name string, typ message.Type) (*mes
 	return c.Exchange(ctx, msg)
 }
 
-// Exchange は構築済みの Message を送信し、応答を受信する詳細 API。
-// リトライと複数サーバーへのフェイルオーバーを行う。
+// 構築済みの Message を送信し、応答を受信する詳細 API
+// リトライと複数サーバーへのフェイルオーバーを行う
 func (c *Client) Exchange(ctx context.Context, msg *message.Message) (*message.Message, error) {
 	if len(c.config.Servers) == 0 {
 		return nil, ErrNoServers
@@ -80,13 +81,14 @@ func (c *Client) Exchange(ctx context.Context, msg *message.Message) (*message.M
 	return nil, fmt.Errorf("%w: %v", ErrAllServersFailed, lastErr)
 }
 
-// exchangeWithRetry は単一サーバーに対してリトライ付きでクエリを実行する。
+// 単一サーバーに対してリトライ付きでクエリを実行する
 func (c *Client) exchangeWithRetry(ctx context.Context, msg *message.Message, server string) (*message.Message, error) {
 	var lastErr error
 
 	for attempt := 0; attempt <= c.config.MaxRetries; attempt++ {
 		if attempt > 0 && c.config.RetryDelay > 0 {
 			select {
+			// キャンセル時は即座に終了
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(c.config.RetryDelay):
@@ -103,7 +105,7 @@ func (c *Client) exchangeWithRetry(ctx context.Context, msg *message.Message, se
 	return nil, lastErr
 }
 
-// exchange は単一サーバーへの1回の送受信を行う。
+// 単一サーバーへの1回の送受信を行う
 func (c *Client) exchange(ctx context.Context, msg *message.Message, server string) (*message.Message, error) {
 	// タイムアウト付きのコンテキストを作成
 	ctx, cancel := context.WithTimeout(ctx, c.config.Timeout)
@@ -155,7 +157,7 @@ func (c *Client) exchange(ctx context.Context, msg *message.Message, server stri
 	return resp, nil
 }
 
-// generateID はランダムな 16 ビット ID を生成する。
+// ランダムな 16 ビット ID を生成する
 func generateID() (uint16, error) {
 	var b [2]byte
 	if _, err := rand.Read(b[:]); err != nil {
