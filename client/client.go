@@ -117,7 +117,7 @@ func (c *Client) exchange(ctx context.Context, msg *message.Message, server stri
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// メッセージをエンコード
 	data, err := msg.Marshal()
@@ -135,7 +135,7 @@ func (c *Client) exchange(ctx context.Context, msg *message.Message, server stri
 
 	// タイムアウト設定
 	if deadline, ok := ctx.Deadline(); ok {
-		conn.SetReadDeadline(deadline)
+		_ = conn.SetReadDeadline(deadline)
 	}
 
 	n, err := conn.Read(buf)

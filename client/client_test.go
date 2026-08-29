@@ -80,12 +80,12 @@ func mockDNSServer(t *testing.T, response []byte) (addr string, close func()) {
 				copy(responseCopy, response)
 				responseCopy[0] = buf[0] // ID 上位
 				responseCopy[1] = buf[1] // ID 下位
-				conn.WriteTo(responseCopy, clientAddr)
+				_, _ = conn.WriteTo(responseCopy, clientAddr)
 			}
 		}
 	}()
 
-	return conn.LocalAddr().String(), func() { conn.Close() }
+	return conn.LocalAddr().String(), func() { _ = conn.Close() }
 }
 
 func TestExchange_Success(t *testing.T) {
@@ -149,7 +149,7 @@ func TestExchange_Timeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start mock server: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	// 読み取りはするが応答しない
 	go func() {
 		buf := make([]byte, 512)

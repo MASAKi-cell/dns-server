@@ -173,6 +173,7 @@ sequenceDiagram
 ## 7. exchange（UDP通信）の内部処理
 
 `exchange`メソッドが1回のDNSクエリ送受信を行います。
+netパッケージを使用して、UDP接続を行います。
 
 ```mermaid
 sequenceDiagram
