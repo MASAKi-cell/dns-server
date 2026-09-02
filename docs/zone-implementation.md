@@ -9,8 +9,8 @@
 | DNSメッセージのエンコード/デコード | message |
 | DNSサーバーへのクエリ送受信 | client |
 | ゾーンファイルのパース・レコード検索 | **zone** |
-| 権威サーバーとしての応答 | server（今後実装） |
-| 反復的な名前解決・キャッシュ | resolver（今後実装） |
+| 権威サーバーとしての応答 | server / cmd/authd |
+| 反復的な名前解決・キャッシュ | resolver / cmd/resolved |
 
 ## 2. ファイル構成
 
@@ -55,6 +55,21 @@ fmt.Println(z.Origin) // "example.com."
 ```
 
 ### レコードの検索
+
+以下の場合：
+www.example.com.  CNAME  web.example.com.
+web.example.com.  A      192.0.2.1
+
+CNAME追跡なし（LookupExact）
+「www.example.com. の A レコードをください」
+　　→ Aレコードは無い → 空を返す
+
+CNAME追跡あり（Lookup）
+「www.example.com. の A レコードをください」
+  → Aレコードは無い
+  → CNAMEがある → web.example.com. を指している
+  → web.example.com. の A を探す → 192.0.2.1 がある
+  → CNAME + A 両方を返す
 
 ```go
 // CNAME追跡ありの検索
