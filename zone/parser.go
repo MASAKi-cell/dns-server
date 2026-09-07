@@ -11,7 +11,7 @@ import (
 	"github.com/MASAKi-cell/dns/message"
 )
 
-// Parse はゾーンファイルをパースしてZoneを返す
+// ゾーンファイルをパースしてZoneを返す
 func Parse(r io.Reader) (*Zone, error) {
 	p := &parser{
 		scanner: bufio.NewScanner(r),
@@ -19,7 +19,7 @@ func Parse(r io.Reader) (*Zone, error) {
 	return p.parse()
 }
 
-// parser はゾーンファイルのパーサー
+// ゾーンファイルのパーサー
 type parser struct {
 	scanner      *bufio.Scanner
 	origin       string
@@ -96,7 +96,7 @@ func (p *parser) parse() (*Zone, error) {
 	return zone, nil
 }
 
-// handleMultiline は複数行にまたがるレコード（括弧）を処理する
+// 複数行にまたがるレコード（括弧）を処理する
 func (p *parser) handleMultiline(line string) string {
 	// 各行のコメントを先に除去
 	line = p.stripComment(line)
@@ -123,8 +123,7 @@ func (p *parser) handleMultiline(line string) string {
 	return line
 }
 
-// stripComment はコメント（;以降）を除去する
-// ただしクォート内のセミコロンは除去しない
+// コメント（;以降）を除去する。ただしクォート内のセミコロンは除去しない
 func (p *parser) stripComment(line string) string {
 	inQuote := false
 	for i, c := range line {
@@ -137,7 +136,7 @@ func (p *parser) stripComment(line string) string {
 	return line
 }
 
-// parseDirective はディレクティブを処理する
+// ディレクティブを処理する
 func (p *parser) parseDirective(line string) error {
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
@@ -164,7 +163,7 @@ func (p *parser) parseDirective(line string) error {
 	return nil
 }
 
-// parseRecord はレコード行をパースする
+// レコード行をパースする
 func (p *parser) parseRecord(line string) (*message.ResourceRecord, error) {
 	tokens := p.tokenize(line)
 	if len(tokens) == 0 {
@@ -256,7 +255,7 @@ func (p *parser) parseRecord(line string) (*message.ResourceRecord, error) {
 	}, nil
 }
 
-// tokenize は行をトークンに分割する（クォートを考慮）
+// 行をトークンに分割する（クォートを考慮）
 func (p *parser) tokenize(line string) []string {
 	var tokens []string
 	var current strings.Builder
@@ -287,7 +286,7 @@ func (p *parser) tokenize(line string) []string {
 	return tokens
 }
 
-// normalizeName は名前を正規化する
+// 名前を正規化する
 func (p *parser) normalizeName(name string) string {
 	// @はオリジンに置換
 	if name == "@" {
@@ -302,7 +301,7 @@ func (p *parser) normalizeName(name string) string {
 	return name
 }
 
-// parseTTL はTTL文字列をパースする
+// TTL文字列をパースする
 func (p *parser) parseTTL(s string) (uint32, error) {
 	// 数値のみの場合
 	if val, err := strconv.ParseUint(s, 10, 32); err == nil {
@@ -346,7 +345,7 @@ func (p *parser) parseTTL(s string) (uint32, error) {
 	return uint32(total), nil
 }
 
-// parseClass はCLASS文字列をパースする
+// CLASS文字列をパースする
 func parseClass(s string) (message.Class, bool) {
 	switch s {
 	case "IN":
@@ -362,7 +361,7 @@ func parseClass(s string) (message.Class, bool) {
 	}
 }
 
-// parseType はTYPE文字列をパースする
+// TYPE文字列をパースする
 func parseType(s string) (message.Type, bool) {
 	switch s {
 	case "A":
@@ -384,7 +383,7 @@ func parseType(s string) (message.Type, bool) {
 	}
 }
 
-// parseRData はRDATAをパースする
+// RDATAをパースする
 func (p *parser) parseRData(typ message.Type, tokens []string) (message.RData, error) {
 	switch typ {
 	case message.TypeA:

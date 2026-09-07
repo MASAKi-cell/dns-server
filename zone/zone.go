@@ -1,4 +1,4 @@
-// Package zone はゾーンファイルのパースとレコードの保持・検索を提供する。
+// ゾーンファイルのパースとレコードの保持・検索を行う。
 // 権威DNSサーバーの中核として、クエリに応じたレコードの検索を担う。
 package zone
 
@@ -8,16 +8,23 @@ import (
 	"github.com/MASAKi-cell/dns/message"
 )
 
-// Zone はゾーン全体を表す
+// ゾーン構造体
+// records格納例：
+//
+//	records = {
+//	    "example.com.": [
+//	       {Type: SOA, RData: SOAData{...}},
+//	       {Type: NS,  RData: NSData{NSDName: "ns1.example.com."}}
+//	}
 type Zone struct {
-	Origin  string // ゾーンのオリジン（例: "example.com."）
-	TTL     uint32 // デフォルトTTL
-	records map[string][]message.ResourceRecord
+	Origin  string                              // ゾーンのオリジン（例: "example.com."）
+	TTL     uint32                              // デフォルトTTL
+	records map[string][]message.ResourceRecord //ドメイン名のレコード情報
 }
 
-// NewZone は新しいZoneを作成する
+// 新しいZoneを作成する
 func NewZone(origin string, ttl uint32) *Zone {
-	// オリジンをFQDN形式に正規化
+	// 末尾に.がなければ、オリジンをFQDN形式に正規化
 	if !strings.HasSuffix(origin, ".") {
 		origin = origin + "."
 	}
@@ -28,20 +35,19 @@ func NewZone(origin string, ttl uint32) *Zone {
 	}
 }
 
-// AddRecord はゾーンにレコードを追加する
+// ゾーンにレコードを追加する
 func (z *Zone) AddRecord(rr message.ResourceRecord) {
 	name := strings.ToLower(string(rr.Name))
 	z.records[name] = append(z.records[name], rr)
 }
 
-// Lookup は名前とタイプでレコードを検索する
-// CNAMEがあればその先も追跡する
+// 名前とタイプでレコードを検索する（CNAMEがあればその先も追跡する）
 func (z *Zone) Lookup(name string, typ message.Type) []message.ResourceRecord {
 	name = z.normalizeName(name)
 	return z.lookupWithCNAME(name, typ, 0)
 }
 
-// lookupWithCNAME はCNAME追跡付きの検索（再帰上限あり）
+// CNAME追跡付きの検索
 func (z *Zone) lookupWithCNAME(name string, typ message.Type, depth int) []message.ResourceRecord {
 	const maxDepth = 8 // CNAME追跡の上限
 
@@ -76,7 +82,7 @@ func (z *Zone) lookupWithCNAME(name string, typ message.Type, depth int) []messa
 	return nil
 }
 
-// LookupExact は完全一致でレコードを検索する（CNAME追跡なし）
+// 完全一致でレコードを検索する（CNAME追跡なし）
 func (z *Zone) LookupExact(name string, typ message.Type) []message.ResourceRecord {
 	name = z.normalizeName(name)
 	allRecords := z.records[name]
@@ -90,13 +96,13 @@ func (z *Zone) LookupExact(name string, typ message.Type) []message.ResourceReco
 	return result
 }
 
-// LookupAll は指定した名前の全レコードを返す
+// 指定した名前の全レコードを返す
 func (z *Zone) LookupAll(name string) []message.ResourceRecord {
 	name = z.normalizeName(name)
 	return z.records[name]
 }
 
-// SOA はゾーンのSOAレコードを返す
+// ゾーンのSOAレコードを返す
 func (z *Zone) SOA() *message.ResourceRecord {
 	records := z.LookupExact(z.Origin, message.TypeSOA)
 	if len(records) > 0 {
@@ -105,12 +111,12 @@ func (z *Zone) SOA() *message.ResourceRecord {
 	return nil
 }
 
-// NS はゾーンのNSレコード群を返す
+// ゾーンのNSレコード群を返す
 func (z *Zone) NS() []message.ResourceRecord {
 	return z.LookupExact(z.Origin, message.TypeNS)
 }
 
-// normalizeName は名前を正規化する（小文字化、FQDN化）
+// 名前を正規化する（小文字化、FQDN化）
 func (z *Zone) normalizeName(name string) string {
 	name = strings.ToLower(name)
 	if !strings.HasSuffix(name, ".") {
@@ -119,7 +125,7 @@ func (z *Zone) normalizeName(name string) string {
 	return name
 }
 
-// IsAuthoritative は指定した名前がこのゾーンの管轄かどうかを返す
+// 指定した名前がこのゾーンの管轄かどうかを返す
 func (z *Zone) IsAuthoritative(name string) bool {
 	name = z.normalizeName(name)
 	return name == z.Origin || strings.HasSuffix(name, "."+z.Origin)

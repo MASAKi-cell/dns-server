@@ -1,0 +1,34 @@
+$ORIGIN example.com.
+$TTL 3600
+
+; SOA レコード
+@       IN      SOA     ns1.example.com. admin.example.com. (
+                        2024010101  ; シリアル番号
+                        3600        ; リフレッシュ (1時間)
+                        900         ; リトライ (15分)
+                        604800      ; 有効期限 (1週間)
+                        86400       ; ネガティブTTL (1日)
+                        )
+
+; NS レコード
+@       IN      NS      ns1.example.com.
+@       IN      NS      ns2.example.com.
+
+; A レコード
+@       IN      A       192.0.2.1
+ns1     IN      A       192.0.2.2
+ns2     IN      A       192.0.2.3
+www     IN      A       192.0.2.10
+
+; AAAA レコード
+www     IN      AAAA    2001:db8::10
+
+; CNAME レコード
+blog    IN      CNAME   www.example.com.
+
+; MX レコード
+@       IN      MX      10 mail.example.com.
+mail    IN      A       192.0.2.20
+
+; TXT レコード
+@       IN      TXT     "v=spf1 mx -all"

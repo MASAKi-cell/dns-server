@@ -1,3 +1,45 @@
+// authd は権威DNSサーバーのコマンドラインツール。
+// ゾーンファイルを読み込み、UDPでDNSクエリに応答する。
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/MASAKi-cell/dns/message"
+	"github.com/MASAKi-cell/dns/server"
+	"github.com/MASAKi-cell/dns/zone"
+)
+
+func main() {
+	addr := flag.String("addr", ":5353", "listen address")
+	zoneFile := flag.String("zone", "", "zone file path (required)")
+	flag.Parse()
+
+	if *zoneFile == "" {
+		fmt.Fprintln(os.Stderr, "error: -zone flag is required")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	// ゾーンファイルを読み込む
+	z, err := loadZone(*zoneFile)
+	if err != nil {
+		log.Fatalf("failed to load zone file: %v", err)
+	}
+
+	log.Printf("loaded zone: %s", z.Origin)
+
+	// ハンドラを作成
+	handler := &AuthHandler{zone: z}
+
+	// サーバーを起動
 	srv := &server.Server{
 		Addr:    *addr,
 		Handler: handler,
