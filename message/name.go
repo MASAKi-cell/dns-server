@@ -14,12 +14,12 @@ const (
 	maxCompressionJumps    = 128  // 圧縮ポインタの追従回数の上限。255byteの名前でもラベル数は127個程度に収まるため、十分な余裕を持たせている。
 )
 
-// Name はDNSドメイン名を表す。ラベルをドットで連結した完全修飾形式
+// Name はDNSドメイン名を表す。ラベルをドットで連結した形式
 // (例: "www.example.com.")で保持し、ルートは "." とする。
 // RFC1035の慣習に従ってドット付きの形式で保持される設計。
 type Name string
 
-// labels は名前をラベルのスライスに分解する（ラベルをドット区切りで保持）
+// 名前をラベルのスライスに分解する（ラベルをドット区切りで保持）
 // "www.example.com."をラベルのスライス（["www", "example", "com"]）に分解する処理
 func (n Name) labels() ([]string, error) {
 	trimmed := strings.TrimSuffix(string(n), ".")
@@ -35,7 +35,7 @@ func (n Name) labels() ([]string, error) {
 	return labels, nil
 }
 
-// marshal はラベル長プレフィックス方式でエンコードし、bufに追記して返す。
+// ラベル長プレフィックス方式でエンコードし、bufに追記して返す。
 // 名前圧縮ポインタの書き込みは対象外(常にフルスペルで書き込む)。
 // 名前のラベルは「長さbyte + ラベル本体」の形式
 func (n Name) marshal(buf []byte) ([]byte, error) {
