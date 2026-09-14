@@ -1,11 +1,87 @@
 # DNSプロトコル仕様
 
-本ドキュメントは、本リポジトリが実装するDNSメッセージのワイヤーフォーマットについてまとめたものです。
+本章ではDNSプロトコルの仕様について解説していきます。
 
-## 1. メッセージの全体構造
+## digコマンドの内容を確認する
 
+まずは、digコマンドの内容を確認してみましょう。digコマンドはDNSサーバーにクエリを送り、返ってきたメッセージを人間が読みやすい形式で表示するだけの読み取り専用ツールです。例えば、`dig +noedns google.com A`を打ち込みと以下のような結果が返ってきます。
+
+```bash
+$ dig +noedns google.com A
+
+; <<>> DiG 9.10.6 <<>> +noedns google.com A
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 26748
+;; flags: qr rd ra; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;google.com.			IN	A
+
+;; ANSWER SECTION:
+google.com.		83	IN	A	172.217.209.139
+google.com.		83	IN	A	172.217.209.102
+google.com.		83	IN	A	172.217.209.101
+google.com.		83	IN	A	172.217.209.138
+google.com.		83	IN	A	172.217.209.100
+google.com.		83	IN	A	172.217.209.113
+
+;; Query time: 7 msec
+;; SERVER: ...#53(...)
+;; WHEN: Wed Aug 19 09:39:24 JST 2026
+;; MSG SIZE  rcvd: 124
+```
+※ `;`で始まる行はコメント(digが付与した注釈)であり、DNSメッセージの一部ではありません。
+
+- `opcode: QUERY`：標準的な問い合わせであることを示す(Opcode=0)
+- `status: NOERROR`： エラーなく正常に処理されたことを示す(RCODE=0)。ドメインが存在しない場合は`NXDOMAIN`になる
+`id: 26748`： クライアントとサーバーを紐付けるためのランダムなID
+- `flags: qr rd ra`： Headerの1bitフラグのうち**立っているものだけ**が略称で列挙される(立っていないフラグは表示されない)。
+  -  `qr`： QR(このメッセージがResponseであることを示す)
+  -  `aa`： AA(応答者がそのゾーンの権威サーバーかどうか)
+  -  `tc`： TC(メッセージが切り詰められたかどうか)
+  -  `rd`： RD(再帰的な名前解決を要求かどうか)
+  -  `ra`： RA(サーバーが再帰問い合わせに対応するかどうか)
+- `QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 0`： 質問1件・回答6件・権威情報0件・追加情報0件、という後続セクションの件数予告
+- `;; QUESTION SECTION:`： Questionセクション。「google.comのAレコードを、クラスINで教えて」という、こちらが送った質問そのものを表している。
+- `;; ANSWER SECTION:`： Answerセクション。NAME TTL CLASS TYPE RDATAの順で実際の回答が並ぶ。
+- `;; AUTHORITY SECTION:`： 権威サーバーの情報が入る欄。件数が0のときは、そもそもこの行自体が出力されない
+- `;; ADDITIONAL SECTION:`： Additionalセクション。補足的なレコードが入る欄。こちらも0件のときは非表示になる
+- `;; MSG SIZE rcvd: 124`： 受信したDNSメッセージが124byteだったことを示す
+- `ANSWER SECTION`： 回答セクション。`google.com. 83 IN A 172.217.209.139`は以下の意味になります。
+  - NAME: `google.com.`
+  - TTL: `83`(秒。このレコードをキャッシュしてよい残り秒数)
+  - CLASS: `IN`
+  - TYPE: `A`
+  - RDATA: `172.217.209.139`
+
+**`ANSWER SECTION:`で複数行返信が返ってきている理由**
+1回の問い合わせに対して、`ANSWER SECTION:`で複数行、返信が返ってきています。
+
+```bash
+;; ANSWER SECTION:
+google.com.		83	IN	A	172.217.209.139
+google.com.		83	IN	A	172.217.209.102
+google.com.		83	IN	A	172.217.209.101
+google.com.		83	IN	A	172.217.209.138
+google.com.		83	IN	A	172.217.209.100
+google.com.		83	IN	A	172.217.209.113
+```
+これは複数のサーバーに問い合わせて回答を集めたのではなく、権威サーバー側が、自分のゾーンファイルに`google.com`のAレコードとしてもともと6つのIPアドレスを登録しており、1つの応答メッセージの中にまとめて返却していることを表しています(Answerセクションに6件のRRが並ぶ)。クライアント側(ブラウザなど)は、返ってきた6つのIPの中からどれか1つを選んで接続します。Googleのように大量のアクセスを捌く必要があるサービスは、権威サーバーが同じドメイン名に対して複数台のサーバー(のIP)を用意しておくことで、その後の接続先選択で複数台に負荷分散させることができます(これを**DNSラウンドロビン**と呼びます)。実際にどれを選んで接続するかはクライアント側(ブラウザやOS)に委ねられます。
+
+```bash
+[実際のインフラ]              [DNSゾーンファイルへの登録]
+サーバー1: 172.217.209.139  →  google.com. 300 IN A 172.217.209.139
+サーバー2: 172.217.209.102  →  google.com. 300 IN A 172.217.209.102
+サーバー3: 172.217.209.101  →  google.com. 300 IN A 172.217.209.101
+サーバー4: 172.217.209.138  →  google.com. 300 IN A 172.217.209.138
+サーバー5: 172.217.209.100  →  google.com. 300 IN A 172.217.209.100
+サーバー6: 172.217.209.113  →  google.com. 300 IN A 172.217.209.113
+```
+
+## メッセージの全体構造
 DNSメッセージは、クエリ・レスポンスを問わず同一フォーマットで、5つのセクションから構成されます。DNSがQRビット1つで済ませることができるのは、「質問も回答も同じ語彙(名前+タイプ+クラス)で表現できる」というドメイン特性を活かした設計になります。
-一方で、HTTPの場合は、クエストはメソッド + パス + バージョン(例: GET /index.html HTTP/1.1)、レスポンスはバージョン + ステータスコード + 理由句(例: HTTP/1.1 200 OK)で、意味は全く別物になります。
+HTTPの場合は、クエストはメソッド + パス + バージョン(例: `GET /index.html HTTP/1.1`)、レスポンスはバージョン + ステータスコード + 理由句(例: `HTTP/1.1 200 OK`)で、別の意味になります。
 
 | セクション | 内容 | 件数を示すHeaderフィールド |
 |---|---|---|
@@ -15,32 +91,31 @@ DNSメッセージは、クエリ・レスポンスを問わず同一フォー�
 | Authority | 権威サーバーを示すResource Record群 | NSCOUNT |
 | Additional | 追加情報のResource Record群(グルーレコード等) | ARCOUNT |
 
-クエリでは通常Questionのみが埋まりANCOUNT等は0となり、レスポンスではHeaderの各カウントに応じてAnswer/Authority/Additionalが続きます。
-カウントフィールドは実データの件数と必ず一致していなければならず、送信側はセクションの実長から算出して書き込みます。
+レスポンスではHeaderの各カウントに応じてAnswer/Authority/Additionalが続きます。
 
-## 2. Headerセクション
+## Headerセクション
 
-Headerセクションは以下の通り構成されます。
+Headerの部分は以下の通り構成されます。
 
 | フィールド | サイズ | 意味 |
 |---|---|---|
-| ID | 16bit | クライアントが発行する識別子。レスポンスはクエリと同じIDを返します |
+| ID | 16bit | クライアントが発行する識別子。レスポンスはクエリと同じIDを返却する |
 | QR | 1bit | 0は問い合わせ、1はレスポンス |
 | Opcode | 4bit | クエリ種別。0=標準クエリ(正常)、1=IQUERY(廃止)、2=サーバーステータス要求 |
-| AA | 1bit | Authoritative Answer。応答者がそのゾーンの権威サーバーかどうかを示します |
-| TC | 1bit | TrunCation。UDPの512byte制限等でメッセージが切り詰められたことを示します。立っていればクライアントはTCPで再送する必要があります |
-| RD | 1bit | Recursion Desired。クライアントが再帰的な名前解決を要求するかどうかを示します |
-| RA | 1bit | Recursion Available。サーバーが再帰問い合わせに対応しているかどうかを示します |
-| Z | 3bit | 予約領域。将来の拡張用で常に0でなければなりません |
+| AA | 1bit | Authoritative Answer。応答者がそのゾーンの権威サーバーかどうかを示す |
+| TC | 1bit | TrunCation。UDPの512byte制限等でメッセージが切り詰められたことを示しす（HeaderのTCビットが立てられる）。TCビットが立っていればレスポンスを受け取ったクライアントはTCPで再送する必要がある |
+| RD | 1bit | Recursion Desired。クライアントが再帰的な名前解決を要求するかどうかを示す |
+| RA | 1bit | Recursion Available。サーバーが再帰問い合わせに対応しているかどうかを示す |
+| Z | 3bit | 予約領域。将来の拡張用で常に0でなければならない |
 | RCODE | 4bit | 応答結果のエラーコード(下表) |
 | QDCOUNT | 16bit | Questionセクションのエントリ数 |
 | ANCOUNT | 16bit | Answerセクションのリソースレコード数 |
 | NSCOUNT | 16bit | Authorityセクションのリソースレコード数 |
 | ARCOUNT | 16bit | Additionalセクションのリソースレコード数 |
 
-全フィールドを合わせて12byte(96bit)です。
+Headerを合わせると12byte(96bit)になります。
 
-```
+```bash
                                     1  1  1  1  1  1
       0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -58,26 +133,7 @@ Headerセクションは以下の通り構成されます。
     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 ```
 
-上段の「1 1 1 1 1 1」と下段の「0〜9, 0〜5」を組み合わせて読むと、bit位置は0, 1, 2, ..., 9, 10, 11, 12, 13, 14, 15の16個(0-indexedで0〜15)になります。つまりこのルーラーは「この1行は16bit=2byte幅ですよ」という目盛りで、Headerの各行(ID行、flags行、QDCOUNT行、ANCOUNT行、NSCOUNT行、ARCOUNT行)の上に共通して使用されます。12byteという合計は、16bit(2byte)の行が6段(ID/flags/QDCOUNT/ANCOUNT/NSCOUNT/ARCOUNT)あることから来ています。flags行はQR/Opcode/AA/TC/RD/RA/Z/RCODEをまとめて1行(2byte)に収めたものです。
-
-#### RD/RAの「再帰的」の意味について
-
-DNSの名前空間は階層構造になっており、1つのサーバーがすべての答えを知っている訳ではありません。
-www.example.comを解決するには、下記階層を上から順にたどる必要があります。
-```
-.(ルート) → .com(TLD) → example.com(権威サーバー)
-```
-
-問い合わせた側は1つのサーバーにだけ聞き、「最終的な答えが出るまであなたが代わりに調べてきて」と依頼します。そのサーバーが下記のように問い合わせを裏側で実施し、最終結果だけをクライアントに返します。
-
-1. ルートサーバーに聞く → 「.comは知らないが、.comの担当サーバーを教えてあげる」と紹介される
-2. .comのTLDサーバーに聞く → 「example.comは知らないが、担当サーバーを教えてあげる」と紹介される
-3. example.comの権威サーバーに聞く → やっとwww.example.comのAレコードが返る
-
-- RD(Recursion Desired): クライアントが送るクエリのフラグ。「このサーバーに再帰的な代行を頼みたい」という意思表示です。
-- RA(Recursion Available): サーバーが返すレスポンスのフラグ。「うちは再帰的な代行に対応しています」という表明のことを指します。
-
-問い合わせを裏側で受け持ってくれるものを一般的にはフルサービスリゾルバと呼び、クライアントはRD=1でクエリを送信します。フルサービスリゾルバは内部でルート→TLD→権威サーバーへの反復的な問い合わせを代行し、最終結果だけをクライアントに返します。逆にルートサーバーやTLDサーバー自体は通常RD=0(再帰非対応)で、紹介を返すだけです。
+上段の「1 1 1 1 1 1」と下段の「0〜9, 0〜5」を組み合わせて読むと、bit位置は0, 1, 2, ..., 9, 10, 11, 12, 13, 14, 15の16個(0-indexedで0〜15)になります。この1行は16bit=2byte幅ですよという目盛りで、Headerの各行(ID行、flags行、QDCOUNT行、ANCOUNT行、NSCOUNT行、ARCOUNT行)の上に共通して使用されます。12byteという合計は、16bit(2byte)の行が6段(`ID/flags/QDCOUNT/ANCOUNT/NSCOUNT/ARCOUNT`)あることから来ています。flags行は`QR/Opcode/AA/TC/RD/RA/Z/RCODE`をまとめて1行(2byte)に収めたものです。
 
 
 ### RCODEの主な値
@@ -93,7 +149,7 @@ RCODEはDNSクエリの応答結果を表示します。
 | 4 | NOTIMP | サーバーが未実装の機能を要求された |
 | 5 | REFUSED | ポリシーにより応答を拒否 |
 
-## 3. Questionセクション
+## Questionセクション
 
 QuestionセクションはQNAME、QTYPE、QCLASSの項目が存在します。
 
@@ -113,11 +169,10 @@ QuestionセクションはQNAME、QTYPE、QCLASSの項目が存在します。
 | QTYPE | 問い合わせるレコード種別(A、AAAAなど) |
 | QCLASS | 問い合わせるクラス(通常はIN) |
 
-## 4. Resource Record共通フォーマット
+## Resource Record
 
 DNSメッセージのAnswer・Authority・Additionalの3つのセクションは、いずれも「Resource Record（RR）」というレコードの配列で構成されています。A、NS、CNAME、MX、TXT、SOAなど、レコードの種類(TYPE)によって中身の意味は異なりますが、フォーマットはすべて共通になっています。
 
-RFC1035 4.1.3では以下のように定義されています。
 ```
     +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
     /                      NAME                     /
@@ -144,24 +199,22 @@ RFC1035 4.1.3では以下のように定義されています。
 | RDLENGTH | 16bit | 後続するRDATAのbyte長 |
 | RDATA | RDLENGTH byte | TYPEとCLASSに応じて解釈される可変長データ。例えばTYPE=AならIPv4アドレス4byte、TYPE=CNAMEならドメイン名、TYPE=MXならpreference値+メールサーバー名、といった具合に中身の形式が変わる |
 
-NAME/TYPE/CLASS/TTL/RDLENGTH は、どんなレコードでも同じ形式でパース可能です。まず共通フォーマット部分を読み切り、その後RDLENGTH（実データ長から算出する値）分のバイト列を切り出して、TYPEに応じたデコーダーを行う、二段階の処理になります。受信側はRDLENGTHぶんだけ読み進めた位置が、そのTYPE用パーサが実際に消費したbyte数と一致することを検証して、不一致はメッセージが壊れているか、パーサにバグがあることを意味します。
+`NAME/TYPE/CLASS/TTL/RDLENGTH`の5つは、どのTYPEのレコードであっても同じ順序・同じ形式で読み取れます。まず共通フォーマット部分を読み切り、その後`RDLENGTH`（実データ長から算出する値）分のバイト列を切り出して、TYPEに応じたデコーダーを行う、二段階の処理になります。実際にそのデコーダーが読み進めたbyte数が事前に分かっていた`RDLENGTH`の値と一致しているかを検証し、不一致の場合はメッセージが壊れているか、パーサにバグがあることを意味します。
 
-## 5. ドメイン名のエンコーディング
+## ドメイン名のエンコーディング
 
-ドメイン名はラベルの列であり、各ラベルは「長さ(1byte) + ラベル本体」の形式で連続してエンコードされ、末尾は長さ0の1byte(ルートラベル)で終端します。
-RFC1035 3.1では以下のように定義されています。
+ドメイン名はラベルの列であり、各ラベルは「長さ(1byte) + ラベル本体」の形式で連続してエンコードされ、末尾は長さ0の1byte(ルートラベル)で終わります。
 ```
-www.example.com. →
+例）www.example.com. →
   3 'w' 'w' 'w'  7 'e' 'x' 'a' 'm' 'p' 'l' 'e'  3 'c' 'o' 'm'  0
 ```
 
-- 1ラベルは最大63byteです(長さbyteの上位2bitは圧縮ポインタ用に予約されているため、ラベル長として表現できるのは0〜63です)
 - 名前全体は長さbyte・終端の0byteを含めて最大255byteです
 - ルート(`.`)は長さ0の1byteのみで表現されます
 
-## 6. 名前圧縮(Message Compression)
+## 名前圧縮(Message Compression)
 
-DNSメッセージでは同じドメイン名が何度も検索されることがあります(QuestionのQNAMEと、それに対応するAnswerのNAME)。そのたびにドメイン名をエンコーディングして全体を書き直すとメッセージが膨らみ、特にUDPの512byte制限を圧迫します。既出のドメイン名(の一部)を**ポインタ**2byteで参照する圧縮方式を定義しています。
+DNSメッセージでは同じドメイン名が何度も検索されることがあります(QuestionのQNAMEと、それに対応するAnswerのNAME)。そのたびにドメイン名をエンコーディングして全体を書き直すとメッセージが膨らみ、特にUDPの場合、512byte制限に引っかかることがあります。そのため、既出のドメイン名(の一部)を**ポインタ**2byteで参照する圧縮を行います。
 
 ### ポインタの形式
 
@@ -181,7 +234,7 @@ DNSメッセージでは同じドメイン名が何度も検索されること�
 |---|---|
 | `00` | 通常のラベル長(残り6bitがラベル長0〜63) |
 | `11` | ポインタ(残り14bitがオフセット) |
-| `01`, `10` | RFC1035では未使用 |
+| `01`, `10` | 未使用[[RFC1035]](#参考文献) |
 
 ### 具体例
 
@@ -199,16 +252,11 @@ byte  :   7  'e' 'x' 'a' 'm' 'p' 'l' 'e'  3  'c' 'o' 'm'  0
 ```
 
 - `03 'n' 's' '1'` … 通常のラベル(長さ3の"ns1")
-- `C0 0C` … ポインタ。2byteをbit列にすると`1100000000001100`で、先頭2bit`11`(ポインタ判別)+残り14bit`00000000001100`(10進で12)。つまり「offset 12から読み直せ」という指示です
+- `C0 0C` … ポインタ。2byteをbit列にすると`1100000000001100`で、先頭2bit`11`(ポインタ判別)+残り14bit`00000000001100`(10進で12)。つまり「offset 12から読み直せ」という指示
 
 デコーダはこの6byteを「"ns1"」+「offset 12から読んだ"example.com."」として`ns1.example.com.`を復元します。圧縮しない場合17byte必要な名前が、6byteで済んでいます。
 
-### 注意点
-
-- ポインタは必ず**後方(より小さいオフセット)** を指します。前方参照や自己参照は無限ループを防ぐため、不正なメッセージとして拒否しなければなりません。
-- デコーダはポインタを何回でも追従しうるため、最大追従回数などでループを防御する必要があります。
-
-## 7. RDATAのフォーマット(TYPE別)
+## RDATAのフォーマット(TYPE別)
 
 RDATAに格納される内容は、TYPEの種類によって異なります。
 TYPE=Aなら4byteのIPv4アドレスがそのまま格納され、TYPE=SOAならMNAME/RNAME(ドメイン名2つ)に続けて32bitの数値が5つ並ぶ仕様となっています。
@@ -221,11 +269,9 @@ TYPE=Aなら4byteのIPv4アドレスがそのまま格納され、TYPE=SOAなら
 | SOA | 6 | MNAME, RNAME(ドメイン名) + SERIAL, REFRESH, RETRY, EXPIRE, MINIMUM(各32bit) |
 | MX | 15 | PREFERENCE(16bit) + EXCHANGE(ドメイン名) |
 | TXT | 16 | 1つ以上のcharacter-string |
-| AAAA | 28 | IPv6アドレス。16byte(RFC3596) |
+| AAAA | 28 | IPv6アドレス。16byte[[RFC3596]](#参考文献) |
 
-### character-string
-
-character-stringはTXTレコードなどで使われる、長さ1byteプレフィックス付きの可変長文字列(Pascal文字列形式)のことです。
+**character-string**はTXTレコードなどで使われる、長さ1byteプレフィックス付きの可変長文字列(Pascal文字列形式)のことです。
 「長さ(1byte, 0〜255) + 本体」の形式で、ドメイン名のラベルとは異なり圧縮ポインタの対象にはなりません（character-stringの長さbyteは0〜255まるごと使用することができ、ドメイン名のラベル長は上位2bitを予約するせいで63までしか使用できない状況とは異なるため）。例えば、helloは以下の形式となります。
 ```
 "hello" → 5 'h' 'e' 'l' 'l' 'o'
@@ -233,177 +279,31 @@ character-stringはTXTレコードなどで使われる、長さ1byteプレフ�
 TXTのRDATAはRDLENGTHが尽きるまでcharacter-stringを繰り返し読むことで、複数文字列を1レコードに格納できます。
 例えばRDLENGTH=12のRDATAが5 'h''e''l''l''o' 5 'w''o''r''l''d'なら、"hello"と"world"という2つのcharacter-stringが1レコードに入っていることになります。
 
-### SOAレコードの各フィールド
 
-SOA(Start Of Authority)はゾーンの管理情報そのものを表すレコードで、プライマリ(マスター)とセカンダリ間のゾーン同期を成立させるためのフィールドです。
-
-| フィールド | 意味 |
-|---|---|
-| MNAME | このゾーンのマスターサーバー名 |
-| RNAME | ゾーン管理者のメールアドレス(`@`を`.`に置き換えた形式 (例:
-dns-admin.google.com.はdns-admin@google.com) |
-| SERIAL | ゾーンのバージョン番号。セカンダリはこれで更新を検知します |
-| REFRESH | セカンダリがマスターに更新確認しに行く間隔(秒) |
-| RETRY | REFRESHに失敗した際の再試行間隔(秒) |
-| EXPIRE | この期間更新できなければセカンダリはゾーンを権威なしとみなします(秒) |
-| MINIMUM | ネガティブキャッシュ(RFC2308)のTTLとして扱われます(RFC2181以降の解釈) |
-
-## 8. TYPE/CLASSの値
-
-| TYPE名 | 値 |
-|---|---|
-| A | 1 |
-| NS | 2 |
-| CNAME | 5 |
-| SOA | 6 |
-| MX | 15 |
-| TXT | 16 |
-| AAAA | 28 |
+## CLASSの値
 
 | CLASS名 | 値 | 備考 |
 |---|---|---|
-| IN | 1 | インターネット。実運用で使うのはほぼこれのみ |
+| IN | 1 | インターネット。実運用で使うのはほぼこれ |
 | CS | 2 | CSNETクラス。現在は廃止 |
 | CH | 3 | Chaosnetクラス |
 | HS | 4 | Hesiod。MIT Project Athenaのネームサービス用 |
 
 ### なぜTYPEとCLASSが別れているのか
+何のデータかとどこのデータかを別々に表現しています。
 
 - **TYPE**: そのレコードが「何の種類のデータか」(A=IPv4アドレス、NS=ネームサーバー、MX=メール交換先など)を表します
 - **CLASS**: そのレコードが「どのネットワーク・プロトコル体系(名前空間)に属するデータか」を表します
 
-つまり「何のデータか」と「どの世界のデータか」という別々の表現をしています。
+DNSが設計された1980年代当時はTCP/IPだけがネットワークプロトコルではなく、Xerox NSやChaosnetなど複数のプロトコル体系が併存していました。そのためDNSは「TCP/IP専用の名前解決システム」ではなく、同じ階層構造・同じメッセージフォーマットを異なるネットワーク体系でも使い回せる汎用の名前解決基盤として設計され、CLASSはその拡張軸として用意されました。同じ`TYPE=A`でもCLASSが違えばRDATAの意味・フォーマットが変わりうる、という想定です。実際にはTCP/IPが多く使用されるようになり、CLASSはほぼ`IN`固定となっています。
 
-DNSが設計された1980年代当時はTCP/IPだけがネットワークプロトコルではなく、Xerox NSやChaosnetなど複数のプロトコル体系が併存していました。そのためDNSは「TCP/IP専用の名前解決システム」ではなく、同じ階層構造・同じメッセージフォーマットを異なるネットワーク体系でも使い回せる汎用の名前解決基盤として設計され、CLASSはその拡張軸として用意されました。同じ`TYPE=A`でもCLASSが違えばRDATAの意味・フォーマットが変わりうる、という想定です。実際にはTCP/IPが多く使用されるようになり、CLASSはほぼ`IN`固定となっていますが、ワイヤーフォーマット上は今も必須フィールドとして残っており、CHクラスは今でもBINDのバージョン確認(`dig CH TXT version.bind`)などで実用されています。
+---
 
-## 9. トランスポートとメッセージサイズ
+## 参考文献
 
-- **UDP**: 512byteを超えるメッセージは切り詰められ、HeaderのTCビットが立てられます。
-- **TCP**: メッセージの前に2byteのビッグエンディアン長プレフィックスを付与して送ります。TCビットが立ったレスポンスを受け取ったクライアントはTCPで再送します
-
-## 10. digコマンドで実際のDNSメッセージを見る
-
-ここまでの仕様が実際のDNSメッセージでどう現れるかは、`dig`コマンドで手元から確認できます。
-`dig`はDNSサーバーにクエリを送り、返ってきたメッセージを人間が読みやすい形式で表示するだけの読み取り専用ツールで、これまでの節で説明したHeader/Question/Answer/Authority/Additionalの各セクションが、ほぼそのままの構成で出力に現れます。
-
-```
-$ dig +noedns google.com A
-
-; <<>> DiG 9.10.6 <<>> +noedns google.com A
-;; global options: +cmd
-;; Got answer:
-;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 26748
-;; flags: qr rd ra; QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 0
-
-;; QUESTION SECTION:
-;google.com.			IN	A
-
-;; ANSWER SECTION:
-google.com.		83	IN	A	172.217.209.139
-google.com.		83	IN	A	172.217.209.102
-google.com.		83	IN	A	172.217.209.101
-google.com.		83	IN	A	172.217.209.138
-google.com.		83	IN	A	172.217.209.100
-google.com.		83	IN	A	172.217.209.113
-
-;; Query time: 7 msec
-;; SERVER: ...#53(...)
-;; WHEN: Wed Aug 19 09:39:24 JST 2026
-;; MSG SIZE  rcvd: 124
-```
-
-### 出力とワイヤーフォーマットの対応
-
-| dig出力の行 | 対応するワイヤーフォーマット | 参照節 |
-|---|---|---|
-| `->>HEADER<<- opcode: QUERY, status: NOERROR, id: 26748` | HeaderのOpcodeフィールド・RCODEフィールド・ID | 2節 |
-| `flags: qr rd ra` | Headerのフラグ群(`QR`/`RD`/`RA`が立っています。立っていないフラグは表示されません) | 2節 |
-| `QUERY: 1, ANSWER: 6, AUTHORITY: 0, ADDITIONAL: 0` | QDCOUNT/ANCOUNT/NSCOUNT/ARCOUNT | 2節 |
-| `;; QUESTION SECTION:` 以下 | Questionセクション(QNAME, QCLASS, QTYPE の順で表示) | 3節 |
-| `;; ANSWER SECTION:` 以下 | Answerセクション(NAME, TTL, CLASS, TYPE, RDATA の順で表示) | 4, 7節 |
-| `;; AUTHORITY SECTION:` (該当時) | Authorityセクション | 1, 4節 |
-| `;; ADDITIONAL SECTION:` (該当時) | Additionalセクション | 1, 4節 |
-| `;; MSG SIZE  rcvd:` | 受信したメッセージ全体のbyte数 | 1節 |
-
-`;`で始まる行はコメント(dig自身が付与した注釈)であり、DNSメッセージそのものの一部ではありません。
-実際のリソースレコードの行は`NAME TTL CLASS TYPE RDATA`の順で1レコード1行に整形されています。
-これは4節のResource Record共通フォーマットの各フィールドがそのまま列挙されたもので、`google.com. 83 IN A 172.217.209.139`であれば
-
-- NAME: `google.com.`
-- TTL: `83`(秒。このレコードをキャッシュしてよい残り秒数)
-- CLASS: `IN`
-- TYPE: `A`
-- RDATA: `172.217.209.139`
-
-と読み替えられます。
-
-### flagsの読み方
-
-`flags:`の行には、Headerの1bitフラグのうち**立っているものだけ**が略称で列挙されます
-(立っていないフラグは表示されません)。
-
-| 略称 | 対応するHeaderフィールド |
-|---|---|
-| `qr` | QR(このメッセージがResponseであることを示します。クエリ側の表示には出ません) |
-| `aa` | AA(応答者がそのゾーンの権威サーバー) |
-| `tc` | TC(メッセージが切り詰められた) |
-| `rd` | RD(再帰的な名前解決を要求) |
-| `ra` | RA(サーバーが再帰問い合わせに対応) |
-
-### 他のTYPEやRCODEの例
-
-**NSレコード**(Additionalセクションにグルーレコードが付く例):
-
-```
-$ dig +noedns google.com NS
-;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 15653
-;; flags: qr rd ra; QUERY: 1, ANSWER: 4, AUTHORITY: 0, ADDITIONAL: 8
-
-;; ANSWER SECTION:
-google.com.		21906	IN	NS	ns1.google.com.
-...
-;; ADDITIONAL SECTION:
-ns1.google.com.		40589	IN	A	216.239.32.10
-ns1.google.com.		40589	IN	AAAA	2001:4860:4802:32::a
-...
-```
-
-NSレコードのRDATA(`ns1.google.com.`)はネームサーバーの名前でありIPアドレスではないため、そのままでは名前解決の役に立ちません。
-そこでサーバーは、そのNSレコードに対応するA/AAAAレコードをAdditionalセクションに**グルーレコード**として付加しています。
-
-**SOAレコード**：
-
-```
-$ dig +noedns google.com SOA
-;; ANSWER SECTION:
-google.com.	45	IN	SOA	ns1.google.com. dns-admin.google.com. 965863404 900 900 1800 60
-```
-
-RDATAの並びはMNAME, RNAME, SERIAL, REFRESH, RETRY, EXPIRE, MINIMUMの順です(7節参照)。
-`dns-admin.google.com.`はRNAME、つまりゾーン管理者のメールアドレス
-(`dns-admin@google.com`の`@`を`.`に置き換えた表記)です。
-
-**存在しないドメイン(NXDOMAIN)の例**:
-
-```
-$ dig +noedns thisdomaindoesnotexist12345.com A
-;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 21583
-;; flags: qr rd ra; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 0
-
-;; AUTHORITY SECTION:
-com.	900	IN	SOA	a.gtld-servers.net. nstld.verisign-grs.com. 1787099934 1800 900 604800 900
-```
-
-`status: NXDOMAIN`はHeaderのRCODEが3であることを示します(2節のRCODE表を参照)。ANSWERは0件ですが、
-AUTHORITYセクションに親ゾーン(`com.`)のSOAレコードが1件返っています。これはネガティブキャッシュ
-(RFC2308)のためで、SOAのMINIMUMフィールド(5節)がこの否定応答をキャッシュしてよい秒数として
-使われます。
-
-### よく使うオプション
-
-| オプション | 効果 |
-|---|---|
-| `+noedns` | EDNS0のOPT疑似レコードを付けずにクエリを送ります。ADDITIONALセクションにOPTが混ざらないため、本リポジトリの`message`パッケージが扱う範囲(EDNS0未対応)とメッセージ構造を素直に対応させやすくなります |
-| `+short` | RDATAだけを簡潔に表示します |
-| `+tcp` | UDPではなくTCP経由で問い合わせます(9節の2byte長プレフィックスの動作を伴います) |
-| `+trace` | ルートサーバーから反復的に権威サーバーを辿る過程を表示します(`resolver`パッケージが将来行う処理のイメージに近いです) |
+- [RFC1034] Mockapetris, P., "Domain Names - Concepts and Facilities", STD 13, RFC 1034, November 1987.
+  https://www.rfc-editor.org/rfc/rfc1034
+- [RFC1035] Mockapetris, P., "Domain Names - Implementation and Specification", STD 13, RFC 1035, November 1987.
+  https://www.rfc-editor.org/rfc/rfc1035
+- [RFC3596] Thomson, S., Huitema, C., Ksinant, V., and M. Souissi, "DNS Extensions to Support IP Version 6", STD 88, RFC 3596, October 2003.
+  https://www.rfc-editor.org/rfc/rfc3596
