@@ -70,10 +70,10 @@ func (n Name) marshal(buf []byte) ([]byte, error) {
 // 「圧縮ポインタも含めて名前を読み終えた直後」まで進める。
 // ポインタの飛び先の読み取りはd.posを動かさずローカルのカーソルで行う。
 func (d *decoder) readName() (Name, error) {
-	labels := []string{}
-	cursor := d.pos
-	jumped := false
-	jumps := 0
+	labels := []string{} // 読み取ったラベルを貯める
+	cursor := d.pos      // 現在の読み取り位置
+	jumped := false      // ポインタジャンプしたか
+	jumps := 0           // ジャンプ回数（無限ループ防止）
 
 	for {
 		if cursor >= len(d.buf) {

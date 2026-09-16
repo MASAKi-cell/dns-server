@@ -44,20 +44,20 @@ func (h Header) marshal(buf []byte) []byte {
 func (h Header) flags() uint16 {
 	var flags uint16
 	if h.QR {
-		flags |= 1 << 15
+		flags |= 1 << 15 // bit 15: QR
 	}
 	flags |= uint16(h.Opcode&0xF) << 11
 	if h.AA {
-		flags |= 1 << 10
+		flags |= 1 << 10 // bit 10: AA
 	}
 	if h.TC {
-		flags |= 1 << 9
+		flags |= 1 << 9 // bit 9: TC
 	}
 	if h.RD {
-		flags |= 1 << 8
+		flags |= 1 << 8 // bit 8: RD
 	}
 	if h.RA {
-		flags |= 1 << 7
+		flags |= 1 << 7 // bit 7: RA
 	}
 	flags |= uint16(h.Z&0x7) << 4
 	flags |= uint16(h.RCode & 0xF)
