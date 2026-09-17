@@ -1,10 +1,6 @@
-# dns
-
-GoによるDNSプロトコルの実装。（DNSメッセージのパース/エンコード、DNSクライアント、再帰リゾルバ、権威サーバー）
-
 ## 概要
 
-このリポジトリは、DNSプロトコルの学習・実験を目的としたGoライブラリです。
+GoによるDNSプロトコルの実装。（DNSメッセージのパース/エンコード、DNSクライアント、再帰リゾルバ、権威サーバー）
 
 ### 主な機能
 
@@ -27,8 +23,6 @@ GoによるDNSプロトコルの実装。（DNSメッセージのパース/エ�
 ## 使い方
 
 ### selfdig - DNS問い合わせツール
-
-`dig`コマンドに似たDNS問い合わせツール。
 
 ```bash
 # デフォルト（Google DNS 8.8.8.8）でAレコードを問い合わせ
@@ -104,23 +98,7 @@ dns/
 └── docs/       # ドキュメント
 ```
 
-## ドキュメント
-
-詳細なドキュメントは`docs/`ディレクトリを参照してください。
-
-- [DNSプロトコル概要](docs/dns-overview.md)
-- [DNSプロトコル詳細](docs/dns-protocol.md)
-- [メッセージ実装](docs/message-implementation.md)
-- [クライアント実装](docs/client-implementation.md)
-- [サーバー実装](docs/server-implementation.md)
-- [リゾルバ実装](docs/resolver-implementation.md)
-- [ゾーン実装](docs/zone-implementation.md)
-
 ## 参考文献
 
 - [RFC 1035 - Domain Names - Implementation and Specification](https://datatracker.ietf.org/doc/html/rfc1035)
 - [RFC 3596 - DNS Extensions to Support IP Version 6](https://datatracker.ietf.org/doc/html/rfc3596)
-
-## ライセンス
-
-MIT License
