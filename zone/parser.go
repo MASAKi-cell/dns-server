@@ -21,13 +21,32 @@ func Parse(r io.Reader) (*Zone, error) {
 
 // ゾーンファイルのパーサー
 type parser struct {
-	scanner      *bufio.Scanner
-	origin       string
-	defaultTTL   uint32
-	lastName     string // 前の行の名前（名前省略時に使用）
-	lineNum      int
-	soaCount     int
-	pendingLines []string // 複数行にまたがるレコード用
+	// ゾーンファイルを1行ずつ読み取るためのスキャナー
+	scanner *bufio.Scanner
+
+	// $ORIGIN ディレクティブで設定されるゾーンの起点ドメイン名
+	// 相対名をFQDNに変換する際の基準となる（例: "example.com."）
+	origin string
+
+	// $TTL ディレクティブで設定されるデフォルトのTTL値
+	// レコード行でTTLが省略された場合にこの値が使用される
+	defaultTTL uint32
+
+	// 直前にパースしたレコードのドメイン名
+	// ゾーンファイルでは名前を省略すると前の行の名前が継続されるため、
+	// その継続処理に使用する
+	lastName string
+
+	// 現在処理中の行番号エラーメッセージで問題のある行を特定するために使用する
+	lineNum int
+
+	// パース中に検出したSOAレコードの数
+	// ゾーンには必ず1つのSOAレコードが必要なため、0個または複数個の場合はエラーとする検証に使用する
+	soaCount int
+
+	// 複数行にまたがるレコードを一時的に保持するバッファ
+	// SOAレコードなど括弧 () で囲まれた複数行のレコードを1つの論理行として結合するために使用する
+	pendingLines []string
 }
 
 func (p *parser) parse() (*Zone, error) {
