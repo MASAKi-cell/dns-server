@@ -122,7 +122,7 @@ func (h *AuthHandler) ServeDNS(req *message.Message) *message.Message {
 		// 名前自体が存在しないか確認
 		allRecords := h.zone.LookupAll(string(q.Name))
 		if len(allRecords) == 0 {
-			// 名前が存在しない（NXDOMAIN）
+			// 名前が存在しない（NXDOMAIN=指定したドメインが存在しないことを示す）
 			resp.Header.RCode = message.RCodeNameError
 		} else {
 			// 名前は存在するが要求されたタイプがない（NOERROR, 空の応答）

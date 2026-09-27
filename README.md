@@ -1,69 +1,69 @@
-## 概要
+## Overview
 
-GoによるDNSプロトコルの実装。（DNSメッセージのパース/エンコード、DNSクライアント、再帰リゾルバ、権威サーバー）
+A DNS protocol implementation in Go. (DNS message parsing/encoding, DNS client, recursive resolver, authoritative server)
 
-> **⚠️ 注意**: 本リポジトリは**学習目的**で作成されています。本番環境やインターネットに公開するサーバーとしての使用は想定していません。セキュリティ対策（レートリミット、アクセス制御、DoS対策等）は実装されていないため、ローカル環境でのテスト・学習用途に限定してご利用ください。
+> **Warning**: This repository is created for **educational purposes**. It is not intended for production use or as an internet-facing server. Security measures (rate limiting, access control, DoS protection, etc.) are not implemented. Please use only for testing and learning in local environments.
 
-### 主な機能
+### Features
 
-- **DNSメッセージ処理** - RFC 1035準拠のワイヤーフォーマットのエンコード/デコード
-- **DNSクライアント** - UDPベースのDNSクエリ送信
-- **再帰リゾルバ** - ルートサーバーから権威サーバーを辿る反復解決
-- **権威サーバー** - ゾーンファイルを読み込んでDNSクエリに応答
-- **ゾーンファイルパーサー** - RFC 1035形式のゾーンファイル読み込み
+- **DNS Message Processing** - RFC 1035 compliant wire format encoding/decoding
+- **DNS Client** - UDP-based DNS query transmission
+- **Recursive Resolver** - Iterative resolution from root servers to authoritative servers
+- **Authoritative Server** - Responds to DNS queries using zone files
+- **Zone File Parser** - RFC 1035 format zone file parsing
 
-### サポートするレコードタイプ
+### Supported Record Types
 
-- A (IPv4アドレス)
-- AAAA (IPv6アドレス)
-- NS (ネームサーバー)
-- CNAME (正規名)
-- MX (メール交換)
-- TXT (テキスト)
-- SOA (権威の開始)
+- A (IPv4 address)
+- AAAA (IPv6 address)
+- NS (Name Server)
+- CNAME (Canonical Name)
+- MX (Mail Exchange)
+- TXT (Text)
+- SOA (Start of Authority)
 
-## 使い方
+## Usage
 
-### selfdig - DNS問い合わせツール
+### selfdig - DNS Query Tool
 
 ```bash
-# デフォルト（Google DNS 8.8.8.8）でAレコードを問い合わせ
+# Query A record using default (Google DNS 8.8.8.8)
 selfdig example.com
 
-# サーバーを指定
+# Specify server
 selfdig @1.1.1.1 example.com
 
-# レコードタイプを指定
+# Specify record type
 selfdig example.com AAAA
 selfdig example.com MX
 selfdig example.com NS
 ```
 
-### resolved - 再帰DNSリゾルバ
+### resolved - Recursive DNS Resolver
 
-ルートサーバーから権威サーバーを辿って名前解決を行う再帰リゾルバ。
+A recursive resolver that performs name resolution by traversing from root servers to authoritative servers.
 
 ```bash
-# デフォルトポート（5353）で起動
+# Start on default port (5353)
 resolved
 
-# ポートを指定
+# Specify port
 resolved -addr :5353
 
-# selfdigで問い合わせ
+# Query with selfdig
 selfdig @127.0.0.1:5353 example.com
 ```
 
-### authd - 権威DNSサーバー
+### authd - Authoritative DNS Server
 
-ゾーンファイルを読み込んで権威応答を返すDNSサーバー。
+A DNS server that loads zone files and returns authoritative responses.
 
 ```bash
-# ゾーンファイルを指定して起動
+# Start with zone file
 authd -zone example.zone -addr :5353
 ```
 
-ゾーンファイルの例:
+Example zone file:
 
 ```
 $ORIGIN example.com.
@@ -84,23 +84,18 @@ mail    IN  MX    10 mail.example.com.
 mail    IN  A     192.0.2.3
 ```
 
-## プロジェクト構成
+## Project Structure
 
 ```
 dns/
-├── message/    # DNSメッセージのエンコード/デコード
-├── client/     # DNSクライアント
-├── server/     # UDPベースのDNSサーバー
-├── resolver/   # 再帰リゾルバ（キャッシュ、ルートヒント含む）
-├── zone/       # ゾーンファイルパーサー
+├── message/    # DNS message encoding/decoding
+├── client/     # DNS client
+├── server/     # UDP-based DNS server
+├── resolver/   # Recursive resolver (including cache and root hints)
+├── zone/       # Zone file parser
 ├── cmd/
-│   ├── selfdig/   # DNS問い合わせツール
-│   ├── resolved/  # 再帰リゾルバデーモン
-│   └── authd/     # 権威サーバーデーモン
-└── docs/       # ドキュメント
+│   ├── selfdig/   # DNS query tool
+│   ├── resolved/  # Recursive resolver daemon
+│   └── authd/     # Authoritative server daemon
+└── docs/       # Documentation
 ```
-
-## 参考文献
-
-- [RFC 1035 - Domain Names - Implementation and Specification](https://datatracker.ietf.org/doc/html/rfc1035)
-- [RFC 3596 - DNS Extensions to Support IP Version 6](https://datatracker.ietf.org/doc/html/rfc3596)
