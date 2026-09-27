@@ -65,6 +65,7 @@ func main() {
 	}
 }
 
+// ゾーンファイルの読み込み
 func loadZone(path string) (*zone.Zone, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -75,14 +76,13 @@ func loadZone(path string) (*zone.Zone, error) {
 	return zone.Parse(f)
 }
 
-// AuthHandler は権威DNSサーバーのハンドラ。
+// 権威DNSサーバーのハンドラ。
 type AuthHandler struct {
 	zone *zone.Zone
 }
 
-// ServeDNS はDNSリクエストを処理する。
+// DNSリクエストを処理する。
 func (h *AuthHandler) ServeDNS(req *message.Message) *message.Message {
-	// 標準クエリ以外は未実装
 	if req.Header.Opcode != message.OpcodeQuery {
 		return h.notImplemented(req)
 	}
@@ -140,6 +140,7 @@ func (h *AuthHandler) ServeDNS(req *message.Message) *message.Message {
 	return resp
 }
 
+// 要求されたクエリの種類や機能をサポートしていないことを返す
 func (h *AuthHandler) notImplemented(req *message.Message) *message.Message {
 	return &message.Message{
 		Header: message.Header{
@@ -152,6 +153,7 @@ func (h *AuthHandler) notImplemented(req *message.Message) *message.Message {
 	}
 }
 
+// エラー構築
 func (h *AuthHandler) formatError(req *message.Message) *message.Message {
 	return &message.Message{
 		Header: message.Header{
@@ -164,6 +166,7 @@ func (h *AuthHandler) formatError(req *message.Message) *message.Message {
 	}
 }
 
+// 管轄外のドメインに対してREFUSEDを返す → 「このサーバーでは応答できない」と明示的に伝える
 func (h *AuthHandler) refused(req *message.Message) *message.Message {
 	return &message.Message{
 		Header: message.Header{
